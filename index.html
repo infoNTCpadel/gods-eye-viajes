@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14100c">
+<title>God's Eye Viajes</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+*{box-sizing:border-box}html,body{margin:0;padding:0;background:#14100c;color:#f3ead6;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{position:sticky;top:0;z-index:1200;background:linear-gradient(#1d1710,#14100c);padding:12px 14px;border-bottom:1px solid #3a2c18}
+h1{margin:0;font-size:20px;color:#e8c877}h1 small{display:block;font-size:11px;color:#b8a888;font-weight:400;margin-top:2px}
+h2{font-size:15px;color:#e8c877;margin:18px 0 8px}
+.wrap{padding:12px 14px 40px;max-width:720px;margin:0 auto}
+#map{height:46vh;min-height:300px;border-radius:14px;border:1px solid #3a2c18;background:#0d0a07}
+.leaflet-container{background:#0d0a07}
+.bar{display:flex;gap:14px;background:#1d1710;border:1px solid #3a2c18;border-radius:12px;padding:10px 12px;margin-top:10px;font-size:13px;flex-wrap:wrap}
+.bar b{color:#e8c877}
+button{background:#d9a441;color:#14100c;border:0;border-radius:10px;padding:11px 14px;font-weight:700;font-size:14px}
+button.sec{background:#2a2114;color:#f3ead6;border:1px solid #4a3a20}
+button.warn{background:#a63d40;color:#fff}
+button:disabled{opacity:.5}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.card{background:#1d1710;border:1px solid #3a2c18;border-radius:12px;padding:12px;margin-top:10px}
+label{font-size:12px;color:#b8a888;display:block;margin-top:10px}
+input,select,textarea{width:100%;margin-top:4px;background:#0f0c08;color:#f3ead6;border:1px solid #4a3a20;border-radius:9px;padding:10px;font-size:15px}
+textarea{min-height:64px}
+.timeline .stop{display:flex;gap:10px;padding:10px;border:1px solid #3a2c18;border-radius:11px;margin-top:8px;background:#181209}
+.dot{width:14px;height:14px;border-radius:50%;margin-top:4px;flex:0 0 14px}
+.stop.done{opacity:.55}.stop.done .st{text-decoration:line-through}
+.mini{font-size:12px;color:#b8a888}.actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.actions button{padding:7px 9px;font-size:12px}
+.pinlbl{font-weight:700;font-size:12px}
+.cards .place img{width:100%;max-height:220px;object-fit:cover;border-radius:9px;margin-top:8px}
+.badge{display:inline-block;font-size:11px;padding:3px 8px;border-radius:20px;color:#14100c;font-weight:700}
+#replayCard{display:none;border:1px solid #d9a441;background:#221a0e}
+.toast{position:fixed;left:12px;right:12px;bottom:14px;z-index:2000;background:#f3ead6;color:#14100c;padding:12px;border-radius:11px;font-weight:700;display:none;box-shadow:0 8px 30px #000}
+a{color:#e8c877}
+.kbd{font-family:monospace;background:#0f0c08;padding:2px 6px;border-radius:5px}
+</style>
+</head>
+<body>
+<header>
+  <h1>👁️ God's Eye Viajes <small>Tu mapa se revela por donde pasas · Ruta del organizador + lugares y fotos</small></h1>
+</header>
+<div class="wrap">
+
+  <div id="importBanner" class="card" style="display:none;border-color:#d9a441"></div>
+
+  <section>
+    <h2>1 · Tu viaje</h2>
+    <div class="card">
+      <div id="noTrip">Crea tu primer viaje para empezar.</div>
+      <div id="tripInfo" style="display:none"></div>
+      <label>Nombre del viaje<input id="tName" placeholder="Ej. Rioja y pueblos 2026"></label>
+      <div class="row" style="margin-top:0">
+        <div style="flex:1"><label>Desde<input id="tFrom" type="date"></label></div>
+        <div style="flex:1"><label>Hasta<input id="tTo" type="date"></label></div>
+      </div>
+      <div class="row">
+        <button id="btnCreate">Crear viaje</button>
+        <button id="btnReset" class="sec">Borrar datos locales</button>
+      </div>
+      <p class="mini">Sin cuentas y sin servidor: todo se guarda en este móvil (localStorage). El código es solo local para identificar tu viaje en este dispositivo.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>2 · Mapa God's Eye</h2>
+    <div id="map"></div>
+    <div class="bar">
+      <span>Distancia revelada: <b id="stKm">0.00 km</b></span>
+      <span>Paradas: <b id="stStops">0</b></span>
+      <span>Lugares: <b id="stPlaces">0</b></span>
+      <span>Estado: <b id="stGps">parado</b></span>
+    </div>
+    <div class="row">
+      <button id="btnRec">● Grabar</button>
+      <button id="btnPause" class="sec" disabled>Pausar</button>
+      <button id="btnSim" class="sec">Simular paseo (sin GPS)</button>
+      <button id="btnCenter" class="sec">Centrar en mí</button>
+    </div>
+    <p class="mini">Fondo oscuro tipo niebla: solo se ve tu trazo dorado y tus pins. Si el navegador no da GPS o no das permiso, usa <b>Simular paseo</b> para probar el revelado y el Replay.</p>
+  </section>
+
+  <section>
+    <h2>3 · Ruta del organizador</h2>
+    <div class="card">
+      <p class="mini" style="margin-top:0">Una persona crea la ruta y la comparte. Todo el grupo ve horas y qué toca en cada momento.</p>
+      <label>Nombre de la parada<input id="sName" placeholder="Ej. Bodega X / Plaza del pueblo"></label>
+      <div class="row" style="margin-top:0">
+        <div style="flex:1"><label>Categoría
+          <select id="sCat"><option value="bodega">🍷 Bodega</option><option value="pueblo">🏘️ Pueblo / ciudad</option><option value="monumento">🏛️ Monumento</option><option value="mirador">🌄 Mirador</option><option value="comer">🍽️ Comer</option><option value="peculiar">✨ Peculiar</option></select></label></div>
+        <div style="flex:1"><label>Hora llegada<input id="sTime" type="time" value="11:00"></label></div>
+        <div style="flex:1"><label>Duración (min)<input id="sDur" type="number" value="60" min="5" step="5"></label></div>
+      </div>
+      <label>Qué hacer allí<textarea id="sDo" placeholder="Ej. Visita guiada + cata de 3 vinos. Reservado a nombre de..."></textarea></label>
+      <div class="row"><button id="btnStop">+ Añadir parada</button>
+      <button id="btnShare" class="sec">🔗 Compartir ruta (WhatsApp)</button></div>
+      <div class="row"><input id="shareLink" readonly placeholder="Aquí saldrá tu enlace para compartir"></div>
+      <p class="mini">El enlace lleva la ruta codificada en la propia URL (<span class="kbd">?ruta=...</span>), sin servidor. Quien lo abre importa esas paradas.</p>
+    </div>
+    <div class="card">
+      <b>Ahora toca</b>
+      <div id="nowBox" class="mini" style="font-size:14px;color:#f3ead6;margin-top:6px">Añade tu primera parada.</div>
+      <div id="timeline" class="timeline"></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>4 · Lugares y fotos</h2>
+    <div class="card">
+      <p class="mini" style="margin-top:0">Crea un pin en el centro del mapa (mueve el mapa hasta el sitio) o vincúlalo luego. Foto de un vino, un monumento, un pueblo…</p>
+      <label>Título<input id="pTitle" placeholder="Ej. Vino tinto reserva / Iglesia del pueblo"></label>
+      <div class="row" style="margin-top:0">
+        <div style="flex:1"><label>Categoría
+          <select id="pCat"><option value="bodega">🍷 Bodega / vino</option><option value="pueblo">🏘️ Pueblo / ciudad</option><option value="monumento">🏛️ Monumento</option><option value="mirador">🌄 Mirador</option><option value="comer">🍽️ Comer</option><option value="peculiar">✨ Peculiar</option></select></label></div>
+      </div>
+      <label>Tu nota personal<textarea id="pNote" placeholder="Ej. Este vino nos encantó, comprar una caja."></textarea></label>
+      <label>Info recabada (editable, pega aquí lo de internet)<textarea id="pInfo" placeholder="Ej. Tempranillo 100%, 24 meses en barrica, D.O.Ca Rioja... / Iglesia del s. XVI..."></textarea></label>
+      <label>Foto<input id="pPhoto" type="file" accept="image/*" capture="environment"></label>
+      <img id="pPreview" style="display:none;width:100%;max-height:220px;object-fit:cover;border-radius:9px;margin-top:8px">
+      <p class="mini" id="photoWarn"></p>
+      <div class="row"><button id="btnPlace">📍 Añadir lugar en el centro del mapa</button></div>
+    </div>
+    <div id="places" class="cards"></div>
+  </section>
+
+  <section>
+    <h2>5 · Replay God's Eye</h2>
+    <div class="card">
+      <p class="mini" style="margin-top:0">Sobrevuela tu recorrido: se redibuja el trazo en ~10 s y van apareciendo tus lugares por orden.</p>
+      <button id="btnReplay">▶ Ver Replay God's Eye</button>
+      <div id="replayCard" class="card"></div>
+    </div>
+  </section>
+
+  <p class="mini">Instálala: menú del navegador → «Añadir a pantalla de inicio». Funciona mejor con HTTPS (lo da tu Traefik con Let's Encrypt).</p>
+</div>
+<div id="toast" class="toast"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const LS='godsEyeViajes_v1';
+const CATS={bodega:{e:'🍷',c:'#c95d63',n:'Bodega'},pueblo:{e:'🏘️',c:'#d9a441',n:'Pueblo'},monumento:{e:'🏛️',c:'#7fb069',n:'Monumento'},mirador:{e:'🌄',c:'#4ea5d9',n:'Mirador'},comer:{e:'🍽️',c:'#e07a5f',n:'Comer'},peculiar:{e:'✨',c:'#b388eb',n:'Peculiar'}};
+let S=load()||{trips:[],activeId:null};
+let photoData='';
+function save(){ try{ localStorage.setItem(LS,JSON.stringify(S)); const kb=(JSON.stringify(S).length/1024).toFixed(0); if(kb>3500) toast('Aviso: datos locales ~'+kb+' KB, cerca del límite del navegador (~5 MB). Reduce fotos.'); }catch(e){ toast('Sin espacio local: foto demasiado grande. Prueba con otra más pequeña.'); } }
+function load(){ try{return JSON.parse(localStorage.getItem(LS))}catch(e){return null} }
+function uid(){return Math.random().toString(36).slice(2,8).toUpperCase()}
+function trip(){ return S.trips.find(t=>t.id===S.activeId)||null }
+function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.style.display='block'; setTimeout(()=>t.style.display='none',3400); }
+function hav(a,b){ const R=6371,toRad=d=>d*Math.PI/180; const dLat=toRad(b[0]-a[0]),dLng=toRad(b[1]-a[1]); const h=Math.sin(dLat/2)**2+Math.cos(toRad(a[0]))*Math.cos(toRad(b[0]))*Math.sin(dLng/2)**2; return 2*R*Math.asin(Math.sqrt(h)); }
+function trackKm(tr){ let k=0; for(let i=1;i<tr.length;i++) k+=hav(tr[i-1],tr[i]); return k; }
+function addMin(time,mins){ let [h,m]=time.split(':').map(Number); let tot=h*60+m+mins; tot=((tot%1440)+1440)%1440; return String(Math.floor(tot/60)).padStart(2,'0')+':'+String(tot%60).padStart(2,'0'); }
+
+/* MAP */
+const map=L.map('map',{zoomControl:true}).setView([41.55,2.1],10);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{attribution:'© OpenStreetMap © CARTO',maxZoom:19,opacity:.45}).addTo(map);
+let line=L.polyline([], {color:'#e8c877',weight:5,opacity:.95}).addTo(map);
+let markers={};
+function divIcon(cat,txt){ return L.divIcon({className:'',html:'<div style="background:'+CATS[cat].c+';border:2px solid #14100c;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:15px;box-shadow:0 2px 10px #000">'+CATS[cat].e+'</div>',iconSize:[30,30],iconAnchor:[15,15]}); }
+function redraw(){
+  const t=trip();
+  document.getElementById('noTrip').style.display=t?'none':'block';
+  document.getElementById('tripInfo').style.display=t?'block':'none';
+  if(t) document.getElementById('tripInfo').innerHTML='<b>'+esc(t.name)+'</b> · Código local: <span class="kbd">'+t.code+'</span><br><span class="mini">'+(t.from||'')+' → '+(t.to||'')+' · Creado en este móvil</span>';
+  Object.values(markers).forEach(m=>map.removeLayer(m)); markers={};
+  if(!t){ line.setLatLngs([]); renderStats(); renderTimeline(); renderPlaces(); return; }
+  line.setLatLngs(t.track);
+  // stops as planned pins (dashed line)
+  if(window._plan) map.removeLayer(window._plan);
+  const pts=t.stops.filter(s=>s.lat).map(s=>[s.lat,s.lng]);
+  if(pts.length>1) window._plan=L.polyline(pts,{color:'#f3ead6',weight:2,dashArray:'6 8',opacity:.6}).addTo(map);
+  t.stops.forEach(s=>{ if(s.lat){ const m=L.marker([s.lat,s.lng],{icon:divIcon(s.cat)}).addTo(map).bindPopup('<span class="pinlbl">'+esc(s.name)+'</span><br>'+s.time+' · '+s.dur+' min<br>'+esc(s.do||'')); markers['s'+s.id]=m; }});
+  t.places.forEach(p=>{ const m=L.marker([p.lat,p.lng],{icon:divIcon(p.cat)}).addTo(map).bindPopup('<span class="pinlbl">'+esc(p.title)+'</span><br>'+esc(p.note||'')+'<br><i>'+esc(p.info||'')+'</i>'); markers['p'+p.id]=m; });
+  renderStats(); renderTimeline(); renderPlaces();
+}
+function esc(s){ return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function renderStats(){ const t=trip(); document.getElementById('stKm').textContent=t?trackKm(t.track).toFixed(2)+' km':'0.00 km'; document.getElementById('stStops').textContent=t?t.stops.length:0; document.getElementById('stPlaces').textContent=t?t.places.length:0; }
+function renderTimeline(){
+  const t=trip(), box=document.getElementById('timeline'), now=document.getElementById('nowBox');
+  if(!t||!t.stops.length){ box.innerHTML=''; now.textContent=t?'Añade tu primera parada.':'Crea primero un viaje.'; return; }
+  const nxt=t.stops.find(s=>!s.done);
+  now.innerHTML=nxt?('<b>'+esc(nxt.name)+'</b> · '+nxt.time+' · '+nxt.dur+' min<br>'+esc(nxt.do||'—')):'🎉 Ruta completada. ¡A por el Replay!';
+  box.innerHTML=t.stops.map((s,i)=>'<div class="stop '+(s.done?'done':'')+'"><div class="dot" style="background:'+CATS[s.cat].c+'"></div><div style="flex:1"><b class="st">'+CATS[s.cat].e+' '+esc(s.name)+'</b><br><span class="mini">'+s.time+' · '+s.dur+' min · '+CATS[s.cat].n+'</span><br><span class="mini">'+esc(s.do||'')+'</span><div class="actions"><button class="sec" onclick="moveStop(\''+s.id+'\',-1)">↑</button><button class="sec" onclick="moveStop(\''+s.id+'\',1)">↓</button><button class="sec" onclick="toggleDone(\''+s.id+'\')">'+(s.done?'Desmarcar':'✓ Hecho')+'</button><button class="sec" onclick="delayStop(\''+s.id+'\')">+20 min retraso</button><button class="sec" onclick="pinStopHere(\''+s.id+'\')">📍 Fijar en centro mapa</button><button class="sec" onclick="delStop(\''+s.id+'\')">Eliminar</button></div></div></div>').join('');
+}
+function renderPlaces(){
+  const t=trip(), box=document.getElementById('places');
+  if(!t||!t.places.length){ box.innerHTML='<div class="card mini">Aún no hay lugares. Añade tu primera foto arriba.</div>'; return; }
+  box.innerHTML=t.places.map(p=>'<div class="card place"><span class="badge" style="background:'+CATS[p.cat].c+'">'+CATS[p.cat].e+' '+CATS[p.cat].n+'</span> <b>'+esc(p.title)+'</b>'+(p.photo?'<img src="'+p.photo+'">':'')+'<p>'+esc(p.note||'')+'</p>'+(p.info?'<p class="mini" style="color:#f3ead6">ℹ️ '+esc(p.info)+'</p>':'')+'<div class="actions"><button class="sec" onclick="goPlace(\''+p.id+'\')">Ver en mapa</button><button class="sec" onclick="delPlace(\''+p.id+'\')">Eliminar</button></div></div>').join('');
+}
+window.moveStop=(id,d)=>{ const t=trip(); const i=t.stops.findIndex(s=>s.id===id); const j=i+d; if(j<0||j>=t.stops.length) return; [t.stops[i],t.stops[j]]=[t.stops[j],t.stops[i]]; save(); redraw(); };
+window.toggleDone=id=>{ const s=trip().stops.find(x=>x.id===id); s.done=!s.done; save(); redraw(); };
+window.delayStop=id=>{ const t=trip(); const i=t.stops.findIndex(s=>s.id===id); for(let k=i;k<t.stops.length;k++) t.stops[k].time=addMin(t.stops[k].time,20); save(); redraw(); toast('Retraso +20 min aplicado desde esta parada.'); };
+window.delStop=id=>{ const t=trip(); t.stops=t.stops.filter(s=>s.id!==id); save(); redraw(); };
+window.pinStopHere=id=>{ const t=trip(); const s=t.stops.find(x=>x.id===id); const c=map.getCenter(); s.lat=+c.lat.toFixed(6); s.lng=+c.lng.toFixed(6); save(); redraw(); toast('Parada fijada en el centro del mapa.'); };
+window.delPlace=id=>{ const t=trip(); t.places=t.places.filter(p=>p.id!==id); save(); redraw(); };
+window.goPlace=id=>{ const p=trip().places.find(x=>x.id===id); if(p){ map.setView([p.lat,p.lng],16); if(markers['p'+id]) markers['p'+id].openPopup(); window.scrollTo({top:0,behavior:'smooth'}); } };
+
+/* TRIP */
+document.getElementById('btnCreate').onclick=()=>{
+  const name=document.getElementById('tName').value.trim(); if(!name){ toast('Pon un nombre al viaje.'); return; }
+  const nt={id:uid(),code:uid(),name,from:document.getElementById('tFrom').value,to:document.getElementById('tTo').value,stops:[],places:[],track:[]};
+  S.trips.push(nt); S.activeId=nt.id; save(); redraw(); toast('Viaje creado: '+name);
+};
+document.getElementById('btnReset').onclick=()=>{ if(confirm('¿Borrar TODOS los datos locales de God\'s Eye Viajes en este móvil?')){ localStorage.removeItem(LS); S={trips:[],activeId:null}; save(); redraw(); toast('Datos borrados.'); } };
+
+/* STOPS */
+document.getElementById('btnStop').onclick=()=>{
+  const t=trip(); if(!t){ toast('Crea primero un viaje.'); return; }
+  const name=document.getElementById('sName').value.trim(); if(!name){ toast('Pon nombre a la parada.'); return; }
+  const c=map.getCenter();
+  t.stops.push({id:uid(),name,cat:document.getElementById('sCat').value,time:document.getElementById('sTime').value||'11:00',dur:Number(document.getElementById('sDur').value||60),do:document.getElementById('sDo').value.trim(),done:false,lat:+c.lat.toFixed(6),lng:+c.lng.toFixed(6)});
+  save(); redraw(); toast('Parada añadida (fijada en el centro del mapa, muévela con 📍 si hace falta).');
+};
+
+/* SHARE ROUTE (?ruta= base64 JSON) */
+function encodeRoute(stops){ return btoa(unescape(encodeURIComponent(JSON.stringify(stops.map(s=>({name:s.name,cat:s.cat,time:s.time,dur:s.dur,do:s.do,lat:s.lat,lng:s.lng})))))); }
+function decodeRoute(b){ return JSON.parse(decodeURIComponent(escape(atob(b)))); }
+document.getElementById('btnShare').onclick=()=>{
+  const t=trip(); if(!t||!t.stops.length){ toast('Añade al menos una parada para compartir.'); return; }
+  const url=location.origin+location.pathname+'?ruta='+encodeURIComponent(encodeRoute(t.stops))+'&viaje='+encodeURIComponent(t.name);
+  document.getElementById('shareLink').value=url;
+  const wa='https://wa.me/?text='+encodeURIComponent("👁️ Ruta God's Eye: "+t.name+"\n"+t.stops.map(s=>'• '+s.time+' '+s.name).join('\n')+"\n\nÁbrela aquí: "+url);
+  if(navigator.clipboard) navigator.clipboard.writeText(url).catch(()=>{});
+  window.open(wa,'_blank'); toast('Enlace generado y copiado. WhatsApp abierto para enviarlo.');
+};
+(function importRoute(){
+  const q=new URLSearchParams(location.search); const r=q.get('ruta'); if(!r) return;
+  try{
+    const stops=decodeRoute(r); const name=q.get('viaje')||'Viaje compartido';
+    const nt={id:uid(),code:uid(),name,from:'',to:'',stops:stops.map(s=>({...s,id:uid(),done:false})),places:[],track:[]};
+    S.trips.push(nt); S.activeId=nt.id; save();
+    const b=document.getElementById('importBanner'); b.style.display='block'; b.innerHTML='<b>Ruta importada:</b> '+esc(name)+' con '+stops.length+' paradas. Ya la tienes abajo en «Ruta del organizador».';
+    history.replaceState({},'',location.pathname);
+  }catch(e){ toast('No se pudo importar la ruta del enlace.'); }
+})();
+
+/* PLACES / PHOTOS */
+document.getElementById('pPhoto').addEventListener('change',e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const img=new Image();
+  img.onload=()=>{ const cv=document.createElement('canvas'); const sc=Math.min(1,900/img.width); cv.width=img.width*sc; cv.height=img.height*sc; cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height); photoData=cv.toDataURL('image/jpeg',.72); const pr=document.getElementById('pPreview'); pr.src=photoData; pr.style.display='block'; document.getElementById('photoWarn').textContent='Foto lista (~'+Math.round(photoData.length/1024)+' KB). Se guardará en este móvil.'; URL.revokeObjectURL(img.src); };
+  img.src=URL.createObjectURL(f);
+});
+document.getElementById('btnPlace').onclick=()=>{
+  const t=trip(); if(!t){ toast('Crea primero un viaje.'); return; }
+  const title=document.getElementById('pTitle').value.trim(); if(!title){ toast('Pon un título al lugar.'); return; }
+  const c=map.getCenter();
+  t.places.push({id:uid(),title,cat:document.getElementById('pCat').value,note:document.getElementById('pNote').value.trim(),info:document.getElementById('pInfo').value.trim(),photo:photoData,lat:+c.lat.toFixed(6),lng:+c.lng.toFixed(6)});
+  photoData=''; document.getElementById('pPreview').style.display='none'; document.getElementById('pPhoto').value='';
+  save(); redraw(); toast('Lugar añadido en el centro del mapa.');
+};
+
+/* GPS */
+let watchId=null, simTimer=null;
+function setGps(txt,rec){ document.getElementById('stGps').textContent=txt; document.getElementById('btnRec').disabled=!!rec; document.getElementById('btnPause').disabled=!rec; }
+function pushPoint(lat,lng){
+  const t=trip(); if(!t) return;
+  const p=[+lat.toFixed(6),+lng.toFixed(6)]; const last=t.track[t.track.length-1];
+  if(last && hav(last,p)<0.008) return;
+  t.track.push(p); save(); line.addLatLng(p); map.panTo(p); renderStats();
+}
+document.getElementById('btnRec').onclick=()=>{
+  const t=trip(); if(!t){ toast('Crea primero un viaje.'); return; }
+  if(!navigator.geolocation){ toast('Este navegador no da GPS. Usa Simular paseo.'); return; }
+  setGps('buscando GPS…',true);
+  watchId=navigator.geolocation.watchPosition(
+    pos=>{ if(pos.coords.accuracy>90) return; setGps('grabando ('+Math.round(pos.coords.accuracy)+' m)',true); pushPoint(pos.coords.latitude,pos.coords.longitude); },
+    err=>{ setGps('sin permiso GPS',false); toast('Sin GPS: '+err.message+'. Puedes probar con Simular paseo.'); stopRec(); },
+    {enableHighAccuracy:true,maximumAge:5000,timeout:15000});
+};
+function stopRec(){ if(watchId!==null) navigator.geolocation.clearWatch(watchId); watchId=null; if(simTimer){clearInterval(simTimer); simTimer=null;} setGps('parado',false); }
+document.getElementById('btnPause').onclick=stopRec;
+document.getElementById('btnCenter').onclick=()=>{ if(navigator.geolocation) navigator.geolocation.getCurrentPosition(p=>map.setView([p.coords.latitude,p.coords.longitude],15),()=>toast('No se pudo centrar.')); };
+document.getElementById('btnSim').onclick=()=>{
+  const t=trip(); if(!t){ toast('Crea primero un viaje.'); return; } stopRec(); setGps('simulando paseo…',true);
+  const c=map.getCenter(); let lat=c.lat,lng=c.lng,ang=Math.random()*Math.PI*2,i=0;
+  simTimer=setInterval(()=>{ i++; ang+=(Math.random()-.5)*.7; const step=.0016; lat+=Math.cos(ang)*step; lng+=Math.sin(ang)*step*1.35; pushPoint(lat,lng); if(i>=42){ stopRec(); toast('Paseo simulado terminado. Prueba el Replay.'); } },180);
+};
+
+/* REPLAY GOD'S EYE (~10 s) */
+document.getElementById('btnReplay').onclick=()=>{
+  const t=trip(); if(!t||t.track.length<2){ toast('Primero graba o simula un paseo.'); return; }
+  stopRec(); const card=document.getElementById('replayCard'); card.style.display='block';
+  card.innerHTML='<b>▶ Replay God\'s Eye de '+esc(t.name)+'</b><p class="mini">Sobrevolando tu recorrido…</p>';
+  const tmp=L.polyline([], {color:'#e8c877',weight:6}).addTo(map); const N=t.track.length; const dur=10000; const step=Math.max(30,dur/N); let i=0; const shown=new Set();
+  const tm=setInterval(()=>{
+    tmp.addLatLng(t.track[i]); map.panTo(t.track[i]);
+    t.places.forEach(p=>{ if(!shown.has(p.id) && hav(t.track[i],[p.lat,p.lng])<.35){ shown.add(p.id); if(markers['p'+p.id]) markers['p'+p.id].openPopup(); } });
+    i++; if(i>=N){ clearInterval(tm); map.removeLayer(tmp);
+      card.innerHTML='<b>👁️ '+esc(t.name)+' — Replay completado</b><br><span class="mini">Distancia revelada</span> <b>'+trackKm(t.track).toFixed(2)+' km</b> · <span class="mini">Paradas</span> <b>'+t.stops.length+'</b> ('+t.stops.filter(s=>s.done).length+' hechas) · <span class="mini">Lugares</span> <b>'+t.places.length+'</b><br>'+t.places.map(p=>CATS[p.cat].e+' '+esc(p.title)).join(' · ')+'<br><span class="mini">Comparte esta tarjeta con una captura, y la ruta con el botón «Compartir ruta».</span>';
+      toast('Replay terminado. Tarjeta del viaje lista abajo.'); }
+  },step);
+};
+
+/* PWA */
+if('serviceWorker' in navigator && (location.protocol==='https:'||location.hostname==='localhost')){ navigator.serviceWorker.register('sw.js').catch(()=>{}); }
+redraw();
+</script>
+</body>
+</html>
