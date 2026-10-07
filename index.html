@@ -46,6 +46,9 @@ textarea{min-height:64px}
 .cards .place img,#pPreview{width:100%;max-height:220px;object-fit:cover;border-radius:9px;margin-top:8px}
 .badge{display:inline-block;font-size:11px;padding:3px 8px;border-radius:20px;color:#14100c;font-weight:700}
 #replayCard{display:none;border:1px solid #d9a441;background:#221a0e}
+#replayBar{display:none;border:1px solid #d9a441;background:#221a0e;border-radius:12px;padding:14px;margin-top:10px}
+#replayBar .trackbar{background:#0f0c08;border:1px solid #4a3a20;border-radius:20px;height:16px;margin-top:10px;overflow:hidden}
+#replayProg{height:100%;width:0%;background:#d9a441;transition:width .15s linear}
 .check{list-style:none;margin:8px 0;padding:0;line-height:1.7;font-size:15px}
 .toast{position:fixed;left:12px;right:12px;bottom:84px;z-index:2000;background:#f3ead6;color:#14100c;padding:12px;border-radius:11px;font-weight:700;display:none;box-shadow:0 8px 30px #000}
 a{color:#e8c877}
@@ -101,6 +104,12 @@ a{color:#e8c877}
   <section id="tab-mapa" class="tab">
     <h2>Mapa God's Eye</h2>
     <div id="map"></div>
+    <div id="replayBar">
+      <b id="replayTitle">▶ Replay God's Eye en curso…</b>
+      <div class="trackbar"><div id="replayProg"></div></div>
+      <div id="replayPlace" class="mini" style="margin-top:8px;font-size:14px;color:#f3ead6">Sobrevolando tu recorrido…</div>
+      <div class="row"><button id="btnStopReplay" class="warn">⏹ Detener Replay</button></div>
+    </div>
     <div class="chips">
       <div class="chip">Distancia revelada<b id="stKm">0.00 km</b></div>
       <div class="chip">Paradas<b id="stStops">0</b></div>
@@ -212,12 +221,23 @@ function uid(){return Math.random().toString(36).slice(2,8).toUpperCase()}
 function trip(){ return S.trips.find(t=>t.id===S.activeId)||null }
 function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.style.display='block'; setTimeout(()=>t.style.display='none',3400); }
 function hav(a,b){ const R=6371,toRad=d=>d*Math.PI/180; const dLat=toRad(b[0]-a[0]),dLng=toRad(b[1]-a[1]); const h=Math.sin(dLat/2)**2+Math.cos(toRad(a[0]))*Math.cos(toRad(b[0]))*Math.sin(dLng/2)**2; return 2*R*Math.asin(Math.sqrt(h)); }
-function trackKm(tr){ let k=0; for(let i=1;i<tr.length;i++) k+=hav(tr[i-1],tr[i]); return k; }
+const MAX_SEG_KM = 1;
+function segmentsOf(track){
+  const segs=[]; let cur=[];
+  (track||[]).forEach(p=>{
+    if(cur.length && hav(cur[cur.length-1],p) > MAX_SEG_KM){ segs.push(cur); cur=[]; }
+    cur.push(p);
+  });
+  if(cur.length) segs.push(cur);
+  return segs;
+}
+function trackKm(tr){ let k=0; const a=tr||[]; for(let i=1;i<a.length;i++){ const d=hav(a[i-1],a[i]); if(d<=MAX_SEG_KM) k+=d; } return k; }
 function addMin(time,mins){ let [h,m]=time.split(':').map(Number); let tot=h*60+m+mins; tot=((tot%1440)+1440)%1440; return String(Math.floor(tot/60)).padStart(2,'0')+':'+String(tot%60).padStart(2,'0'); }
 function esc(s){ return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 /* TABS */
 function showTab(name){
+  if(typeof replayTimer!=='undefined' && replayTimer && name!=='mapa'){ cleanupReplay(); toast('Replay detenido al cambiar de pestaña.'); }
   document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
   const pane=document.getElementById('tab-'+name); if(pane) pane.classList.add('active');
   document.querySelectorAll('#bottomNav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===name));
@@ -234,7 +254,14 @@ document.getElementById('btnChangeTrip').onclick=()=>showTab('start');
 /* MAP */
 const map=L.map('map',{zoomControl:true}).setView([41.55,2.1],10);
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors',maxZoom:19}).addTo(map);
-let line=L.polyline([], {color:'#e8c877',weight:5,opacity:.95}).addTo(map);
+let line=L.layerGroup().addTo(map);
+function drawTrackGroup(group,track,opts){
+  group.clearLayers();
+  segmentsOf(track).forEach(seg=>{
+    if(seg.length===1){ L.circleMarker(seg[0],{radius:4,color:(opts&&opts.color)||'#e8c877',weight:3,opacity:.95}).addTo(group); }
+    else { L.polyline(seg, Object.assign({color:'#e8c877',weight:5,opacity:.95}, opts||{})).addTo(group); }
+  });
+}
 let markers={};
 function divIcon(cat,txt){ return L.divIcon({className:'',html:'<div style="background:'+CATS[cat].c+';border:2px solid #14100c;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:15px;box-shadow:0 2px 10px #000">'+CATS[cat].e+'</div>',iconSize:[30,30],iconAnchor:[15,15]}); }
 function redraw(){
@@ -245,8 +272,8 @@ function redraw(){
   if(t){ hdrT.style.display='block'; hdrT.textContent='👁️ '+t.name; hdrR.style.display='flex'; document.getElementById('tripInfo').innerHTML='<b>'+esc(t.name)+'</b> · Código local: <span class="kbd">'+t.code+'</span><br><span class="mini">'+(t.from||'')+' → '+(t.to||'')+' · Creado en este móvil</span>'; }
   else { hdrT.style.display='none'; hdrN.style.display='none'; hdrR.style.display='none'; }
   Object.values(markers).forEach(m=>map.removeLayer(m)); markers={};
-  if(!t){ line.setLatLngs([]); renderStats(); renderTimeline(); renderPlaces(); renderReplayCheck(); return; }
-  line.setLatLngs(t.track);
+  if(!t){ line.clearLayers(); renderStats(); renderTimeline(); renderPlaces(); renderReplayCheck(); return; }
+  drawTrackGroup(line, t.track, {color:'#e8c877',weight:5,opacity:.95});
   if(window._plan) map.removeLayer(window._plan);
   const pts=t.stops.filter(s=>s.lat).map(s=>[s.lat,s.lng]);
   if(pts.length>1) window._plan=L.polyline(pts,{color:'#f3ead6',weight:2,dashArray:'6 8',opacity:.6}).addTo(map);
@@ -361,7 +388,7 @@ function pushPoint(lat,lng){
   const t=trip(); if(!t) return;
   const p=[+lat.toFixed(6),+lng.toFixed(6)]; const last=t.track[t.track.length-1];
   if(last && hav(last,p)<0.008) return;
-  t.track.push(p); save(); line.addLatLng(p); map.panTo(p); renderStats(); renderReplayCheck();
+  t.track.push(p); save(); drawTrackGroup(line, t.track, {color:'#e8c877',weight:5,opacity:.95}); map.panTo(p); renderStats(); renderReplayCheck();
 }
 function startRec(){
   const t=trip(); if(!t){ toast('Crea primero un viaje.'); showTab('start'); return; }
@@ -377,31 +404,80 @@ document.getElementById('btnRecToggle').onclick=()=>{ if(recording){ stopRec(); 
 document.getElementById('btnCenter').onclick=()=>{ if(navigator.geolocation) navigator.geolocation.getCurrentPosition(p=>map.setView([p.coords.latitude,p.coords.longitude],15),()=>toast('No se pudo centrar.')); };
 document.getElementById('btnSim').onclick=()=>{
   const t=trip(); if(!t){ toast('Crea primero un viaje.'); showTab('start'); return; } stopRec(); setGps('simulando paseo…',true);
-  const c=map.getCenter(); let lat=c.lat,lng=c.lng,ang=Math.random()*Math.PI*2,i=0;
+  const c=map.getCenter(); const startPt=(t.track && t.track.length)? t.track[t.track.length-1] : [c.lat,c.lng]; let lat=startPt[0],lng=startPt[1],ang=Math.random()*Math.PI*2,i=0;
   simTimer=setInterval(()=>{ i++; ang+=(Math.random()-.5)*.7; const step=.0016; lat+=Math.cos(ang)*step; lng+=Math.sin(ang)*step*1.35; pushPoint(lat,lng); if(i>=42){ stopRec(); toast('Paseo simulado terminado. Ahora sí: ve a la pestaña Replay.'); } },180);
 };
 
 /* REPLAY GOD'S EYE (~10 s) */
+let replayTimer=null, replayGroup=null;
+function cleanupReplay(){
+  if(replayTimer){ clearInterval(replayTimer); replayTimer=null; }
+  if(replayGroup){ try{map.removeLayer(replayGroup);}catch(e){} replayGroup=null; }
+  const bar=document.getElementById('replayBar'); if(bar) bar.style.display='none';
+  const prog=document.getElementById('replayProg'); if(prog) prog.style.width='0%';
+}
+function updateReplayBar(pct, placeTitle){
+  const bar=document.getElementById('replayBar'); if(bar) bar.style.display='block';
+  const prog=document.getElementById('replayProg'); if(prog) prog.style.width=Math.min(100,Math.max(0,pct))+'%';
+  if(placeTitle){ const pl=document.getElementById('replayPlace'); if(pl) pl.textContent='📍 '+placeTitle; }
+}
+document.getElementById('btnStopReplay').onclick=()=>{
+  cleanupReplay();
+  showTab('replay');
+  toast('Replay detenido. Puedes volver a verlo cuando quieras.');
+};
+function finishReplay(t){
+  cleanupReplay();
+  const card=document.getElementById('replayCard'); card.style.display='block';
+  card.innerHTML='<b>👁️ '+esc(t.name)+' — Replay completado</b><br><span class="mini">Distancia revelada</span> <b>'+trackKm(t.track).toFixed(2)+' km</b> · <span class="mini">Paradas</span> <b>'+t.stops.length+'</b> ('+t.stops.filter(s=>s.done).length+' hechas) · <span class="mini">Lugares</span> <b>'+t.places.length+'</b><br>'+t.places.map(p=>CATS[p.cat].e+' '+esc(p.title)).join(' · ')+'<br><span class="mini">Haz una captura de esta tarjeta para compartirla, y la ruta con el botón «Compartir ruta» de la pestaña Ruta.</span>';
+  showTab('replay');
+  toast('Replay terminado. Aquí tienes tu tarjeta del viaje.');
+}
+function startReplay(){
+  const t=trip(); if(!t || t.track.length<2) return;
+  stopRec();
+  cleanupReplay();
+  const card=document.getElementById('replayCard'); card.style.display='block';
+  card.innerHTML='<b>▶ Replay God\'s Eye de '+esc(t.name)+'</b><p class="mini">Sobrevolando tu recorrido en el Mapa…</p>';
+  showTab('mapa');
+  const mapEl=document.getElementById('map');
+  setTimeout(()=>{ if(mapEl) mapEl.scrollIntoView({behavior:'smooth',block:'center'}); },80);
+  updateReplayBar(0);
+  document.getElementById('replayPlace').textContent='Sobrevolando tu recorrido…';
+  setTimeout(()=>{
+    try{ map.invalidateSize(); }catch(e){}
+    try{
+      const bounds=L.latLngBounds(t.track);
+      map.fitBounds(bounds,{padding:[30,30]});
+      if(trackKm(t.track)<2 && map.getZoom()<14){ map.setZoom(14); }
+    }catch(e){}
+    replayGroup=L.layerGroup().addTo(map);
+    const N=t.track.length; const dur=10000; const stepMs=Math.max(30,dur/N); let i=0; const shown=new Set();
+    let curLine=null, prev=null;
+    replayTimer=setInterval(()=>{
+      if(i>=N){
+        clearInterval(replayTimer); replayTimer=null;
+        updateReplayBar(100);
+        setTimeout(()=>finishReplay(t),800);
+        return;
+      }
+      const p=t.track[i];
+      if(prev && hav(prev,p) > MAX_SEG_KM){ curLine=null; }
+      if(!curLine){ curLine=L.polyline([p], {color:'#e8c877',weight:6,opacity:.98}).addTo(replayGroup); }
+      else { curLine.addLatLng(p); }
+      prev=p;
+      try{ map.panTo(p,{animate:true}); if(trackKm(t.track)<2 && map.getZoom()<14) map.setZoom(14); }catch(e){}
+      t.places.forEach(pl=>{ if(!shown.has(pl.id) && hav(p,[pl.lat,pl.lng])<.35){ shown.add(pl.id); if(markers['p'+pl.id]) markers['p'+pl.id].openPopup(); updateReplayBar(Math.round(((i+1)/N)*100), pl.title); } });
+      updateReplayBar(Math.round(((i+1)/N)*100));
+      i++;
+    },stepMs);
+  },350);
+}
 document.getElementById('btnReplay').onclick=()=>{
   const t=trip();
   if(!t){ showTab('start'); toast('Primero crea tu viaje aquí.'); return; }
   if(t.track.length<2){ showTab('mapa'); toast('Te falta el recorrido: graba o simula un paseo aquí y vuelve a Replay.'); return; }
-  stopRec();
-  const card=document.getElementById('replayCard'); card.style.display='block';
-  card.innerHTML='<b>▶ Replay God\'s Eye de '+esc(t.name)+'</b><p class="mini">Sobrevolando tu recorrido… mira el mapa.</p>';
-  showTab('replay');
-  // El mapa está en otra pestaña: avisamos y enlazamos visualmente con la tarjeta; el trazo se anima sobre el mapa al volver a Mapa también visible vía tarjeta.
-  // Para que se vea la animación, cambiamos a Mapa durante el vuelo y volvemos con la tarjeta en Replay al terminar.
-  showTab('mapa');
-  const tmp=L.polyline([], {color:'#e8c877',weight:6}).addTo(map); const N=t.track.length; const dur=10000; const step=Math.max(30,dur/N); let i=0; const shown=new Set();
-  const tm=setInterval(()=>{
-    tmp.addLatLng(t.track[i]); map.panTo(t.track[i]);
-    t.places.forEach(p=>{ if(!shown.has(p.id) && hav(t.track[i],[p.lat,p.lng])<.35){ shown.add(p.id); if(markers['p'+p.id]) markers['p'+p.id].openPopup(); } });
-    i++; if(i>=N){ clearInterval(tm); map.removeLayer(tmp);
-      card.innerHTML='<b>👁️ '+esc(t.name)+' — Replay completado</b><br><span class="mini">Distancia revelada</span> <b>'+trackKm(t.track).toFixed(2)+' km</b> · <span class="mini">Paradas</span> <b>'+t.stops.length+'</b> ('+t.stops.filter(s=>s.done).length+' hechas) · <span class="mini">Lugares</span> <b>'+t.places.length+'</b><br>'+t.places.map(p=>CATS[p.cat].e+' '+esc(p.title)).join(' · ')+'<br><span class="mini">Haz una captura de esta tarjeta para compartirla, y la ruta con el botón «Compartir ruta» de la pestaña Ruta.</span>';
-      showTab('replay');
-      toast('Replay terminado. Aquí tienes tu tarjeta del viaje.'); }
-  },step);
+  startReplay();
 };
 
 /* PWA */
