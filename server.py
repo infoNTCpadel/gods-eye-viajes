@@ -21,6 +21,8 @@ LOCK = threading.Lock()
 
 CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # sin 0/O/1/I
 MAX_BODY = 64 * 1024
+MAX_BODY_PLACE = 2500 * 1024
+PHOTOS_DIR = os.path.join(DATA_DIR, "photos")
 STATIC = {
     "/": ("index.html", "text/html; charset=utf-8"),
     "/index.html": ("index.html", "text/html; charset=utf-8"),
@@ -65,11 +67,19 @@ def init_db():
               done INTEGER DEFAULT 0, ord INTEGER DEFAULT 0, created_at TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS places(
               id TEXT PRIMARY KEY, trip_id TEXT NOT NULL REFERENCES trips(id),
+              member_id TEXT DEFAULT '', author_nickname TEXT DEFAULT '',
               title TEXT DEFAULT '', cat TEXT DEFAULT 'peculiar', note TEXT DEFAULT '',
-              info TEXT DEFAULT '', photo TEXT DEFAULT '', lat REAL, lng REAL,
+              info TEXT DEFAULT '', photo TEXT DEFAULT '', photo_path TEXT DEFAULT '',
+              lat REAL, lng REAL, stop_id TEXT DEFAULT '',
               created_by TEXT DEFAULT '', created_at TEXT NOT NULL);
             """
         )
+        # Migracion suave para BDs 2A ya creadas
+        cols = {r["name"] for r in c.execute("PRAGMA table_info(places)")}
+        for col, typ in (("member_id", "TEXT DEFAULT ''"), ("author_nickname", "TEXT DEFAULT ''"),
+                         ("photo_path", "TEXT DEFAULT ''"), ("stop_id", "TEXT DEFAULT ''")):
+            if col not in cols:
+                c.execute("ALTER TABLE places ADD COLUMN %s %s" % (col, typ))
 
 
 def new_code(c):
@@ -95,7 +105,26 @@ def stop_public(r):
 
 
 def place_public(r):
-    return {"id": r["id"], "title": r["title"], "cat": r["cat"], "note": r["note"] or "", "info": r["info"] or "", "photo": r["photo"] or "", "lat": r["lat"], "lng": r["lng"]}
+    keys = r.keys() if hasattr(r, "keys") else []
+    photo_path = r["photo_path"] if "photo_path" in keys else ""
+    photo_url = ""
+    if photo_path:
+        photo_url = "/api/photos/%s/%s" % (r["trip_id"], photo_path)
+    author = ""
+    if "author_nickname" in keys and r["author_nickname"]:
+        author = r["author_nickname"]
+    elif "created_by" in keys:
+        author = r["created_by"] or ""
+    return {
+        "id": r["id"], "title": r["title"], "cat": r["cat"], "note": r["note"] or "",
+        "info": r["info"] or "", "photo": "", "photoUrl": photo_url,
+        "photoPath": photo_path or "",
+        "lat": r["lat"], "lng": r["lng"],
+        "stopId": (r["stop_id"] if "stop_id" in keys else "") or "",
+        "author": author,
+        "memberId": (r["member_id"] if "member_id" in keys else "") or "",
+        "createdAt": r["created_at"],
+    }
 
 
 def trip_state(c, trip_row):
@@ -130,7 +159,7 @@ def clean_str(v, maxlen, field):
 
 
 class H(BaseHTTPRequestHandler):
-    server_version = "GodsEyeViajes/2A"
+    server_version = "GodsEyeViajes/2B"
 
     def log_message(self, *a):
         pass
@@ -147,9 +176,9 @@ class H(BaseHTTPRequestHandler):
     def err(self, code, msg):
         self.send_json(code, {"ok": False, "error": msg})
 
-    def read_json(self):
+    def read_json(self, limit=MAX_BODY):
         ln = int(self.headers.get("Content-Length") or 0)
-        if ln > MAX_BODY:
+        if ln > limit:
             raise ValueError("cuerpo demasiado grande")
         raw = self.rfile.read(ln) if ln else b"{}"
         try:
@@ -180,6 +209,8 @@ class H(BaseHTTPRequestHandler):
         p = urlparse(self.path).path
         if p == "/api/health":
             return self.send_json(200, {"ok": True})
+        if p.startswith("/api/photos/"):
+            return self.serve_photo(p)
         if p.startswith("/api/trips/by-code/"):
             return self.get_by_code(unquote(p.rsplit("/", 1)[-1]).upper())
         if p in STATIC:
@@ -196,6 +227,8 @@ class H(BaseHTTPRequestHandler):
             parts = [x for x in p.split("/") if x]
             if len(parts) == 4 and parts[0] == "api" and parts[1] == "trips" and parts[3] == "stops":
                 return self.create_stop(parts[2])
+            if len(parts) == 4 and parts[0] == "api" and parts[1] == "trips" and parts[3] == "places":
+                return self.create_place(parts[2])
             if len(parts) == 4 and parts[0] == "api" and parts[1] == "trips" and parts[3] == "heartbeat":
                 return self.heartbeat(parts[2])
             return self.err(404, "no encontrado")
@@ -215,9 +248,14 @@ class H(BaseHTTPRequestHandler):
     def do_DELETE(self):
         p = urlparse(self.path).path
         parts = [x for x in p.split("/") if x]
-        if len(parts) == 3 and parts[0] == "api" and parts[1] == "stops":
-            return self.delete_stop(parts[2])
-        return self.err(404, "no encontrado")
+        try:
+            if len(parts) == 3 and parts[0] == "api" and parts[1] == "stops":
+                return self.delete_stop(parts[2])
+            if len(parts) == 3 and parts[0] == "api" and parts[1] == "places":
+                return self.delete_place(parts[2])
+            return self.err(404, "no encontrado")
+        except ValueError as e:
+            return self.err(400, str(e))
 
     # ---------- endpoints ----------
     def create_trip(self):
@@ -363,6 +401,92 @@ class H(BaseHTTPRequestHandler):
             c.execute("DELETE FROM stops WHERE id=?", (stop_id,))
         self.send_json(200, {"ok": True})
 
+    def create_place(self, trip_id):
+        a = self.auth(trip_id)
+        if not a:
+            return
+        m, _t = a
+        b = self.read_json(MAX_BODY_PLACE)
+        title = clean_str(b.get("title"), 90, "title")
+        if not title:
+            return self.err(400, "title obligatorio")
+        photo_path = ""
+        photo = b.get("photo") or ""
+        if photo:
+            import base64
+
+            if not isinstance(photo, str) or "," not in photo:
+                return self.err(400, "foto invalida")
+            try:
+                raw = base64.b64decode(photo.split(",", 1)[1], validate=True)
+            except Exception:
+                return self.err(400, "foto invalida")
+            if len(raw) > 2 * 1024 * 1024:
+                return self.err(400, "foto demasiado grande")
+            if len(raw) < 10:
+                return self.err(400, "foto invalida")
+            photo_path = uuid.uuid4().hex + ".jpg"
+            dest_dir = os.path.join(PHOTOS_DIR, trip_id)
+            os.makedirs(dest_dir, exist_ok=True)
+            with open(os.path.join(dest_dir, photo_path), "wb") as f:
+                f.write(raw)
+        pid = uuid.uuid4().hex
+        with LOCK, db() as c:
+            c.execute(
+                "INSERT INTO places(id,trip_id,member_id,author_nickname,title,cat,note,info,photo,photo_path,lat,lng,stop_id,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (pid, trip_id, m["id"], m["nickname"], title,
+                 clean_str(b.get("cat"), 20, "cat") or "peculiar",
+                 clean_str(b.get("note"), 500, "note"), clean_str(b.get("info"), 800, "info"),
+                 "", photo_path, b.get("lat"), b.get("lng"),
+                 clean_str(b.get("stopId"), 80, "stopId"), m["nickname"], now_iso()),
+            )
+            r = c.execute("SELECT * FROM places WHERE id=?", (pid,)).fetchone()
+        self.send_json(201, {"ok": True, "place": place_public(r)})
+
+    def delete_place(self, place_id):
+        with LOCK, db() as c:
+            p0 = c.execute("SELECT * FROM places WHERE id=?", (place_id,)).fetchone()
+        if not p0:
+            return self.err(404, "lugar no existe")
+        a = self.auth(p0["trip_id"])
+        if not a:
+            return
+        m, _t = a
+        is_author = ("member_id" in p0.keys() and p0["member_id"] == m["id"])
+        if not is_author and m["role"] != "organizer":
+            return self.err(403, "solo el autor o el organizador puede borrar este lugar")
+        photo_path = p0["photo_path"] if "photo_path" in p0.keys() else ""
+        with LOCK, db() as c:
+            c.execute("DELETE FROM places WHERE id=?", (place_id,))
+        if photo_path:
+            try:
+                os.remove(os.path.join(PHOTOS_DIR, p0["trip_id"], os.path.basename(photo_path)))
+            except OSError:
+                pass
+        self.send_json(200, {"ok": True})
+
+    def serve_photo(self, p):
+        # /api/photos/<tripId>/<file> — sin token (URL con uuid no adivinable).
+        # Anti path-traversal: solo basename y ruta resuelta dentro de PHOTOS_DIR.
+        parts = [unquote(x) for x in p.split("/") if x]
+        if len(parts) != 4 or parts[0] != "api" or parts[1] != "photos":
+            return self.err(404, "no encontrado")
+        trip_id, fname = parts[2], os.path.basename(parts[3])
+        if not fname or fname != parts[3]:
+            return self.err(404, "no encontrado")
+        base = os.path.realpath(PHOTOS_DIR)
+        path = os.path.realpath(os.path.join(base, trip_id, fname))
+        if not path.startswith(base + os.sep) or not os.path.isfile(path):
+            return self.err(404, "no encontrado")
+        with open(path, "rb") as f:
+            body = f.read()
+        self.send_response(200)
+        self.send_header("Content-Type", "image/jpeg")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "public, max-age=86400")
+        self.end_headers()
+        self.wfile.write(body)
+
     def heartbeat(self, trip_id):
         a = self.auth(trip_id)
         if not a:
@@ -398,5 +522,5 @@ class H(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     init_db()
-    print("Gods Eye Viajes 2A en :%d DATA_DIR=%s" % (PORT, DATA_DIR), flush=True)
+    print("Gods Eye Viajes 2B en :%d DATA_DIR=%s" % (PORT, DATA_DIR), flush=True)
     ThreadingHTTPServer(("0.0.0.0", PORT), H).serve_forever()

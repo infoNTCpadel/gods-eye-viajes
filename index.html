@@ -58,6 +58,18 @@ a{color:#e8c877}
 .bottomnav button .ic{font-size:22px}
 .bottomnav button.on{color:#e8c877;background:#2a2114;box-shadow:inset 0 3px 0 #d9a441}
 .smallbtn{width:auto}
+.mapwrap{position:relative}
+#rpOverlay{display:none;position:absolute;left:10px;right:10px;bottom:10px;z-index:900;background:rgba(20,16,12,.94);border:1px solid #d9a441;border-radius:14px;padding:10px}
+#rpOverlay img{width:100%;max-height:46vh;object-fit:cover;border-radius:10px;display:block}
+#rpOverlay .t{font-weight:800;font-size:18px;margin-top:8px}
+#rpOverlay .n{font-size:14px;color:#e8ddc4;margin-top:2px}
+.fab{position:fixed;right:16px;bottom:82px;z-index:1700;width:64px;height:64px;min-height:64px;border-radius:50%;font-size:28px;padding:0;box-shadow:0 8px 24px #000;display:none;align-items:center;justify-content:center}
+.catchips{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.catchips button{width:auto;min-height:48px;padding:10px 14px;background:#2a2114;color:#f3ead6;border:1px solid #4a3a20}
+.catchips button.on{background:#d9a441;color:#14100c}
+.topbtns{display:flex;gap:8px;margin-top:8px}
+.topbtns button{min-height:44px;font-size:14px;padding:8px}
+.grouph{font-size:15px;color:#e8c877;margin:18px 0 2px;font-weight:800}
 </style>
 </head>
 <body>
@@ -66,7 +78,7 @@ a{color:#e8c877}
   <div id="hdrTrip" class="tripname" style="display:none"></div>
   <div id="hdrNow" class="nowline" style="display:none"></div>
   <div id="hdrMembers" class="nowline" style="display:none;font-size:12px;color:#b8a888"></div>
-  <div class="row" id="hdrChangeRow" style="display:none"><button id="btnChangeTrip" class="sec">Cambiar viaje</button></div>
+  <div class="topbtns" id="hdrChangeRow" style="display:none"><button id="btnShareTrip" class="sec">Compartir viaje</button><button id="btnChangeTrip" class="sec">Cambiar viaje</button></div>
 </div>
 <div class="wrap">
 
@@ -74,49 +86,42 @@ a{color:#e8c877}
 
   <!-- EMPEZAR / VIAJE -->
   <section id="tab-start" class="tab">
-    <h2>Empezar tu viaje</h2>
-    <div class="card help">
-      <b>En 3 pasos:</b>
-      <ol>
-        <li><b>Crea el viaje privado</b> o <b>únete con el código</b> que te pasen.</li>
-        <li>En <b>Ruta</b>, el organizador añade paradas con hora y qué hacer. Todos ven «Ahora toca» y cuánto queda.</li>
-        <li>En <b>Mapa</b> dale a Grabar y muévete. Al final, tu <b>Replay</b> God's Eye.</li>
-      </ol>
-    </div>
-    <div id="serverError" class="card" style="display:none;border-color:#a63d40"><b>⚠️ Sin conexión con el servidor del viaje.</b><p class="mini" style="color:#f3ead6">No se ha podido contactar con <span class="kbd">/api/</span> en este servidor. Revisa que estás en viajes.ntcpadel.com con el despliegue nuevo (Fase 2A) y vuelve a intentarlo. Tus datos del viaje viven en el servidor, no en este móvil.</p></div>
+    <h2>God's Eye Viajes 👁️</h2>
+    <div id="serverError" class="card" style="display:none;border-color:#a63d40"><b>⚠️ Sin conexión con el servidor.</b></div>
     <div id="sessionCard" class="card" style="display:none"></div>
+    <div id="sharePanel" class="card" style="display:none;border-color:#d9a441"></div>
     <div class="card">
-      <h2 style="margin-top:0">Crear viaje privado</h2>
-      <p class="mini" style="margin-top:0">Lo crea una persona y comparte el código. El resto entra con ese código, sin cuentas.</p>
-      <label>Nombre del viaje<input id="tName" placeholder="Ej. Rioja y pueblos 2026"></label>
-      <label>Tu apodo<input id="tNick" placeholder="Ej. Mateo"></label>
+      <h2 style="margin-top:0">Crear viaje</h2>
+      <label>Nombre del viaje<input id="tName" placeholder="Rioja y pueblos 2026"></label>
+      <label>Tu apodo<input id="tNick" placeholder="Mateo"></label>
       <div class="row" style="margin-top:0">
         <div><label>Desde<input id="tFrom" type="date"></label></div>
         <div><label>Hasta<input id="tTo" type="date"></label></div>
       </div>
       <div class="row">
-        <button id="btnCreate">Crear viaje privado →</button>
+        <button id="btnCreate">Crear viaje</button>
       </div>
     </div>
     <div class="card">
-      <h2 style="margin-top:0">Unirme a un viaje</h2>
-      <label>Código del viaje<input id="jCode" placeholder="Ej. K7PX3M" style="text-transform:uppercase" maxlength="6"></label>
-      <label>Tu apodo<input id="jNick" placeholder="Ej. Ana"></label>
+      <h2 style="margin-top:0">Unirme con código</h2>
+      <label>Código<input id="jCode" placeholder="K7PX3M" style="text-transform:uppercase" maxlength="6"></label>
+      <label>Tu apodo<input id="jNick" placeholder="Ana"></label>
       <div class="row">
-        <button id="btnJoin" class="sec">Unirme con este código →</button>
+        <button id="btnJoin" class="sec">Entrar</button>
       </div>
     </div>
     <div id="inviteBox" class="card" style="display:none;border-color:#d9a441"></div>
     <div class="card" id="leaveCard" style="display:none">
-      <div class="row"><button id="btnLeave" class="sec">Salir de este viaje en este móvil</button></div>
-      <p class="mini">Solo cierra tu sesión en este dispositivo. El viaje y su ruta siguen en el servidor para el grupo.</p>
+      <div class="row"><button id="btnLeave" class="sec">Salir de este viaje</button></div>
     </div>
   </section>
 
   <!-- MAPA -->
   <section id="tab-mapa" class="tab">
-    <h2>Mapa God's Eye</h2>
-    <div id="map"></div>
+    <h2>Mapa</h2>
+    <div class="mapwrap"><div id="map"></div>
+      <div id="rpOverlay"><img id="rpImg" alt=""><div class="t" id="rpTitle"></div><div class="n" id="rpNote"></div></div>
+    </div>
     <div id="replayBar">
       <b id="replayTitle">▶ Replay God's Eye en curso…</b>
       <div class="trackbar"><div id="replayProg"></div></div>
@@ -135,15 +140,6 @@ a{color:#e8c877}
     <div class="row">
       <button id="btnSim" class="sec">Simular paseo (sin GPS)</button>
       <button id="btnCenter" class="sec">Centrar en mí</button>
-    </div>
-    <div class="card help">
-      <b>Qué hacer aquí:</b>
-      <ol>
-        <li>Pulsa <b>Grabar</b>.</li>
-        <li><b>Muévete</b> (o pulsa Simular paseo para probar sin moverte).</li>
-        <li>Cuando termines, ve a la pestaña <b>Replay</b> para ver tu película.</li>
-      </ol>
-      <p class="mini">Fondo oscuro tipo niebla: solo se ve tu trazo dorado y tus pins. Teselas © OpenStreetMap contributors, oscurecidas con un filtro visual.</p>
     </div>
   </section>
 
@@ -166,53 +162,52 @@ a{color:#e8c877}
         <div><label>Hora llegada<input id="sTime" type="time" value="11:00"></label></div>
         <div><label>Duración (min)<input id="sDur" type="number" value="60" min="5" step="5"></label></div>
       </div>
-      <label>Qué hacer allí<textarea id="sDo" placeholder="Ej. Visita guiada + cata de 3 vinos. Reservado a nombre de..."></textarea></label>
+      <label>Qué hacer allí<textarea id="sDo" placeholder="Visita + cata"></textarea></label>
       <div class="row"><button id="btnStop">Guardar parada</button></div>
-      <p class="mini">La parada se fija en el centro del mapa en ese momento; luego puedes moverla con «📍 Fijar en centro mapa» en su tarjeta.</p>
     </div>
-    <div class="card">
-      <b>Compartir con el grupo</b>
-      <p class="mini">El viaje es privado: solo entra quien tenga el <b>código de 6 letras</b>. Comparte el enlace de invitación y cada uno pone su apodo.</p>
-      <div class="row"><button id="btnShare" class="sec">🔗 Compartir invitación (WhatsApp)</button></div>
-      <div class="row"><input id="shareLink" readonly placeholder="Aquí saldrá tu enlace de invitación"></div>
-    </div>
+    <input id="shareLink" type="hidden">
   </section>
 
   <!-- LUGARES -->
   <section id="tab-lugares" class="tab">
-    <h2>Lugares y fotos</h2>
+    <h2>Fotos del grupo</h2>
     <div id="places" class="cards"></div>
     <div class="row">
-      <button id="btnTogglePlaceForm">+ Añadir lugar con foto</button>
+      <button id="btnTogglePlaceForm">📸 Añadir foto</button>
     </div>
     <div id="placeFormWrap" class="card" style="display:none">
-      <p class="mini" style="margin-top:0">El pin se crea en el centro del mapa: mueve el mapa hasta el sitio antes de guardar. Foto de un vino, un monumento, un pueblo…</p>
-      <label>Título<input id="pTitle" placeholder="Ej. Vino tinto reserva / Iglesia del pueblo"></label>
-      <label>Categoría
-        <select id="pCat"><option value="bodega">🍷 Bodega / vino</option><option value="pueblo">🏘️ Pueblo / ciudad</option><option value="monumento">🏛️ Monumento</option><option value="mirador">🌄 Mirador</option><option value="comer">🍽️ Comer</option><option value="peculiar">✨ Peculiar</option></select></label>
-      <label>Tu nota personal<textarea id="pNote" placeholder="Ej. Este vino nos encantó, comprar una caja."></textarea></label>
-      <label>Info recabada (editable, pega aquí lo de internet)<textarea id="pInfo" placeholder="Ej. Tempranillo 100%, 24 meses en barrica, D.O.Ca Rioja... / Iglesia del s. XVI..."></textarea></label>
       <label>Foto<input id="pPhoto" type="file" accept="image/*" capture="environment"></label>
       <img id="pPreview" style="display:none">
       <p class="mini" id="photoWarn"></p>
-      <div class="row"><button id="btnPlace">📍 Guardar lugar en el centro del mapa</button></div>
+      <div class="catchips" id="catChips">
+        <button type="button" data-cat="bodega">🍷 Bodega</button>
+        <button type="button" data-cat="pueblo">🏘️ Pueblo</button>
+        <button type="button" data-cat="monumento">🏛️ Monumento</button>
+        <button type="button" data-cat="mirador">🌄 Mirador</button>
+        <button type="button" data-cat="comer">🍽️ Comer</button>
+        <button type="button" data-cat="peculiar" class="on">✨ Peculiar</button>
+      </div>
+      <label>Título<input id="pTitle" placeholder="Vino reserva"></label>
+      <label>Nota (opcional)<input id="pNote" placeholder="Nos encantó"></label>
+      <input id="pInfo" type="hidden">
+      <div class="row"><button id="btnPlace">Guardar en el viaje</button></div>
     </div>
   </section>
 
   <!-- REPLAY -->
   <section id="tab-replay" class="tab">
-    <h2>Replay God's Eye</h2>
+    <h2>Replay</h2>
     <div class="card">
-      <b>Antes de verlo, comprueba esto:</b>
       <ul id="replayCheck" class="check"></ul>
-      <p class="mini">Qué va a pasar: el mapa sobrevuela tu recorrido en ~10 segundos, redibuja tu trazo dorado, abre tus lugares por orden y al final te muestra la tarjeta del viaje para capturar y compartir.</p>
-      <div class="row"><button id="btnReplay">▶ Ver Replay God's Eye (10 s)</button></div>
+      <div class="row"><button id="btnReplay">▶ Ver Replay (10 s)</button></div>
+      <div class="row"><button id="btnDownloadReplay" class="sec">⬇ Descargar Replay en vídeo</button></div>
+      <p class="mini" id="dlStatus" style="display:none"></p>
       <div id="replayCard" class="card"></div>
     </div>
   </section>
 
-  <p class="mini">Instálala: menú del navegador → «Añadir a pantalla de inicio». Funciona mejor con HTTPS (lo da tu Traefik con Let's Encrypt).</p>
 </div>
+<button id="btnFabCam" class="fab" title="Añadir foto">📸</button>
 
 <nav class="bottomnav" id="bottomNav">
   <button data-tab="mapa"><span class="ic">🗺️</span>Mapa</button>
@@ -228,10 +223,11 @@ const SES_KEY='godsEyeViajes_v2session';
 const DEV_KEY='godsEyeViajes_v2device';
 const LOC_KEY='godsEyeViajes_v2local';
 const CATS={bodega:{e:'🍷',c:'#c95d63',n:'Bodega'},pueblo:{e:'🏘️',c:'#d9a441',n:'Pueblo'},monumento:{e:'🏛️',c:'#7fb069',n:'Monumento'},mirador:{e:'🌄',c:'#4ea5d9',n:'Mirador'},comer:{e:'🍽️',c:'#e07a5f',n:'Comer'},peculiar:{e:'✨',c:'#b388eb',n:'Peculiar'}};
-let session=loadJson(SES_KEY,null);           // {tripId,inviteCode,memberToken,nickname,role}
+let session=loadJson(SES_KEY,null);           // {tripId,inviteCode,memberToken,memberId,nickname,role}
 let serverState=null;                          // {trip,members,stops,places,live}
-let localData=loadJson(LOC_KEY,{tracks:{},places:{}}); // GPS/places locales por tripId (2A: aun locales)
+let localData=loadJson(LOC_KEY,{tracks:{},places:{}}); // solo GPS local por tripId (places ya en servidor)
 let photoData='';
+let placeCat='peculiar';
 let lastPos=null;
 function loadJson(k,d){ try{ const v=JSON.parse(localStorage.getItem(k)); return v==null?d:v; }catch(e){ return d; } }
 function saveSession(){ if(session) localStorage.setItem(SES_KEY,JSON.stringify(session)); else localStorage.removeItem(SES_KEY); }
@@ -239,11 +235,10 @@ function saveLocal(){ try{ localStorage.setItem(LOC_KEY,JSON.stringify(localData
 function deviceId(){ let d=localStorage.getItem(DEV_KEY); if(!d){ d='dev-'+Math.random().toString(36).slice(2)+Date.now().toString(36); localStorage.setItem(DEV_KEY,d); } return d; }
 function isOrganizer(){ return !!(session && session.role==='organizer'); }
 function localTrack(){ if(!session) return []; return (localData.tracks && localData.tracks[session.tripId])||[]; }
-function localPlaces(){ if(!session) return []; const lp=(localData.places && localData.places[session.tripId])||[]; const sp=(serverState && serverState.places)||[]; return sp.length?sp:lp; }
 function trip(){
   if(!session || !serverState || !serverState.trip) return null;
   const t=serverState.trip;
-  return {id:t.id, code:t.inviteCode, name:t.name, from:t.from||'', to:t.to||'', stops:serverState.stops||[], places:localPlaces(), track:localTrack()};
+  return {id:t.id, code:t.inviteCode, name:t.name, from:t.from||'', to:t.to||'', stops:serverState.stops||[], places:(serverState.places||[]), track:localTrack()};
 }
 function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.style.display='block'; setTimeout(()=>t.style.display='none',3600); }
 function hav(a,b){ const R=6371,toRad=d=>d*Math.PI/180; const dLat=toRad(b[0]-a[0]),dLng=toRad(b[1]-a[1]); const h=Math.sin(dLat/2)**2+Math.cos(toRad(a[0]))*Math.cos(toRad(b[0]))*Math.sin(dLng/2)**2; return 2*R*Math.asin(Math.sqrt(h)); }
@@ -311,6 +306,8 @@ function showTab(name){
   document.querySelectorAll('#bottomNav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===name));
   if(name==='mapa'){ setTimeout(()=>{ try{map.invalidateSize()}catch(e){} },60); }
   if(name==='replay'){ renderReplayCheck(); }
+  const fab=document.getElementById('btnFabCam');
+  if(fab) fab.style.display=(session && (name==='mapa'||name==='lugares'))?'flex':'none';
   window.scrollTo({top:0,behavior:'smooth'});
 }
 document.querySelectorAll('#bottomNav button').forEach(b=>b.addEventListener('click',()=>{
@@ -318,6 +315,7 @@ document.querySelectorAll('#bottomNav button').forEach(b=>b.addEventListener('cl
   showTab(b.dataset.tab);
 }));
 document.getElementById('btnChangeTrip').onclick=()=>showTab('start');
+document.getElementById('btnShareTrip').onclick=()=>{ showTab('start'); const sp=document.getElementById('sharePanel'); if(sp){ sp.style.display='block'; sp.scrollIntoView({behavior:'smooth',block:'center'}); } };
 
 /* MAP */
 const map=L.map('map',{zoomControl:true}).setView([41.55,2.1],10);
@@ -336,25 +334,24 @@ function inviteLink(){ return location.origin+location.pathname+'?join='+encodeU
 function renderSession(){
   const sc=document.getElementById('sessionCard'), ib=document.getElementById('inviteBox'), lc=document.getElementById('leaveCard');
   const hdrT=document.getElementById('hdrTrip'), hdrN=document.getElementById('hdrNow'), hdrM=document.getElementById('hdrMembers'), hdrR=document.getElementById('hdrChangeRow');
-  if(!session){ sc.style.display='none'; ib.style.display='none'; lc.style.display='none'; hdrT.style.display='none'; hdrN.style.display='none'; hdrM.style.display='none'; hdrR.style.display='none'; return; }
+  if(!session){ sc.style.display='none'; ib.style.display='none'; lc.style.display='none'; hdrT.style.display='none'; hdrN.style.display='none'; hdrM.style.display='none'; hdrR.style.display='none'; const fab0=document.getElementById('btnFabCam'); if(fab0) fab0.style.display='none'; return; }
   const t=serverState && serverState.trip;
   sc.style.display='block'; lc.style.display='block';
-  sc.innerHTML='<b>Estás dentro'+(t?': '+esc(t.name):'')+'</b><br><span class="mini">Tu apodo: <b style="color:#f3ead6">'+esc(session.nickname)+'</b> · Rol: <b style="color:#f3ead6">'+(isOrganizer()?'organizador':'miembro')+'</b><br>El viaje vive en el servidor: todo el grupo ve la misma ruta.</span>';
-  ib.style.display='block';
-  ib.innerHTML='<b>Código del viaje (privado)</b><div style="font-size:34px;letter-spacing:4px;color:#e8c877;font-weight:800;margin:8px 0">'+esc(session.inviteCode)+'</div><p class="mini">Pásalo solo a tu grupo. Con este código y su apodo, cada uno entra en el mismo viaje.</p><div class="row"><button id="btnShare2" class="sec">🔗 Compartir invitación (WhatsApp)</button></div><div class="row"><input id="shareLink2" readonly value="'+esc(inviteLink())+'"></div>';
+  sc.innerHTML='<b>'+esc(t?t.name:'Viaje')+'</b> · '+esc(session.nickname)+(isOrganizer()?' · organizador':'');
+  ib.style.display='none';
+  const shareHtml='<b>Código</b><div style="font-size:34px;letter-spacing:4px;color:#e8c877;font-weight:800;margin:8px 0">'+esc(session.inviteCode)+'</div><div class="row"><button id="btnShare2" class="sec">Compartir por WhatsApp</button></div><div class="row"><input id="shareLink2" readonly value="'+esc(inviteLink())+'"></div>';
+  const sp=document.getElementById('sharePanel'); if(sp) sp.innerHTML=shareHtml;
   const b2=document.getElementById('btnShare2'); if(b2) b2.onclick=shareInvite;
   hdrT.style.display='block'; hdrT.textContent='👁️ '+(t?t.name:'Tu viaje');
   hdrR.style.display='flex';
-  // members
   const mem=(serverState && serverState.members)||[];
-  if(mem.length){ hdrM.style.display='block'; hdrM.textContent='👥 '+mem.map(m=>m.nickname+(m.role==='organizer'?' (organizador)':'')).join(' · '); }
-  // Ahora toca en cabecera
+  if(mem.length){ hdrM.style.display='block'; hdrM.textContent='👥 '+mem.map(m=>m.nickname+(m.role==='organizer'?' (org.)':'')).join(' · '); }
   const live=serverState && serverState.live; const nxt=live && live.nextStop;
   hdrN.style.display='block';
-  if(!serverState){ hdrN.innerHTML='Cargando el viaje…'; }
-  else if(nxt){ hdrN.innerHTML='Ahora toca: <b>'+esc(nxt.name)+'</b> · '+esc(nxt.time)+quedanTxt(nxt.time)+' · <b>'+live.done+'/'+live.total+' paradas</b>'; }
-  else if(live && live.total){ hdrN.innerHTML='Ruta completada 🎉 Ve a <b>Replay</b> · <b>'+live.done+'/'+live.total+' paradas</b>'; }
-  else { hdrN.innerHTML='Ahora toca: <b>crear la ruta en la pestaña Ruta</b>'; }
+  if(!serverState){ hdrN.innerHTML='Cargando…'; }
+  else if(nxt){ hdrN.innerHTML='Ahora toca: <b>'+esc(nxt.name)+'</b> · '+esc(nxt.time)+quedanTxt(nxt.time)+' · <b>'+live.done+'/'+live.total+'</b>'; }
+  else if(live && live.total){ hdrN.innerHTML='Ruta completada 🎉 · <b>'+live.done+'/'+live.total+'</b>'; }
+  else { hdrN.innerHTML='Sin paradas aún.'; }
   const sl=document.getElementById('shareLink'); if(sl) sl.value=inviteLink();
 }
 function redraw(){
@@ -367,7 +364,7 @@ function redraw(){
   const pts=t.stops.filter(s=>s.lat!=null).map(s=>[s.lat,s.lng]);
   if(pts.length>1) window._plan=L.polyline(pts,{color:'#f3ead6',weight:2,dashArray:'6 8',opacity:.6}).addTo(map);
   t.stops.forEach(s=>{ if(s.lat!=null){ const m=L.marker([s.lat,s.lng],{icon:divIcon(s.cat)}).addTo(map).bindPopup('<span class="pinlbl">'+esc(s.name)+'</span><br>'+esc(s.time)+' · '+s.dur+' min<br>'+esc(s.do||'')); markers['s'+s.id]=m; }});
-  t.places.forEach(p=>{ if(p.lat!=null){ const m=L.marker([p.lat,p.lng],{icon:divIcon(p.cat)}).addTo(map).bindPopup('<span class="pinlbl">'+esc(p.title)+'</span><br>'+esc(p.note||'')+'<br><i>'+esc(p.info||'')+'</i>'); markers['p'+p.id]=m; } });
+  t.places.forEach(p=>{ if(p.lat!=null){ const m=L.marker([p.lat,p.lng],{icon:divIcon(p.cat)}).addTo(map).bindPopup('<span class="pinlbl">'+esc(p.title)+'</span>'+(p.photoUrl?'<br><img src="'+esc(p.photoUrl)+'" style="width:160px;border-radius:8px;margin-top:6px">':'')+'<br>'+esc(p.note||'')+(p.author?'<br><span class="mini">por '+esc(p.author)+'</span>':'')); markers['p'+p.id]=m; } });
   renderStats(); renderTimeline(); renderPlaces(); renderReplayCheck();
 }
 function renderStats(){ const t=trip(); document.getElementById('stKm').textContent=t?trackKm(t.track).toFixed(2)+' km':'0.00 km'; document.getElementById('stStops').textContent=t?t.stops.length:0; document.getElementById('stPlaces').textContent=t?t.places.length:0; }
@@ -395,17 +392,31 @@ function renderTimeline(){
 }
 function renderPlaces(){
   const box=document.getElementById('places'); const t=trip();
-  if(!t||!t.places.length){ box.innerHTML='<div class="card"><b>Aún no hay lugares.</b><p class="mini">Cuando estés en un sitio que quieras recordar —un vino, un monumento, un pueblo— pulsa el botón grande de abajo, haz la foto y guarda tu nota. Aparecerá aquí y como pin en el mapa.</p></div>'; return; }
-  box.innerHTML=t.places.map(p=>'<div class="card place"><span class="badge" style="background:'+(CATS[p.cat]||CATS.peculiar).c+'">'+(CATS[p.cat]||CATS.peculiar).e+' '+(CATS[p.cat]||CATS.peculiar).n+'</span> <b>'+esc(p.title)+'</b>'+(p.photo?'<img src="'+p.photo+'">':'')+'<p>'+esc(p.note||'')+'</p>'+(p.info?'<p class="mini" style="color:#f3ead6">ℹ️ '+esc(p.info)+'</p>':'')+'<div class="actions"><button class="sec" onclick="goPlace(\''+p.id+'\')">Ver en mapa</button><button class="sec" onclick="delPlace(\''+p.id+'\')">Eliminar</button></div></div>').join('');
+  if(!t||!t.places.length){ box.innerHTML='<div class="card">Aún no hay fotos. Sé el primero 📸</div>'; return; }
+  const stopName={}; t.stops.forEach(s=>stopName[s.id]=s.name);
+  const stopOrd={}; t.stops.forEach((s,i)=>stopOrd[s.id]=i);
+  const groups={};
+  t.places.forEach(p=>{ const k=p.stopId&&stopName[p.stopId]?p.stopId:''; (groups[k]=groups[k]||[]).push(p); });
+  const keys=Object.keys(groups).sort((a,b)=>{ if(a==='') return 1; if(b==='') return -1; return (stopOrd[a]??99)-(stopOrd[b]??99); });
+  let html='';
+  keys.forEach(k=>{
+    if(k) html+='<div class="grouph">📍 '+esc(stopName[k])+'</div>';
+    else if(keys.length>1) html+='<div class="grouph">Otros sitios</div>';
+    html+=groups[k].map(p=>{
+      const mine=session && (session.memberId===p.memberId || isOrganizer());
+      return '<div class="card place"><span class="badge" style="background:'+(CATS[p.cat]||CATS.peculiar).c+'">'+(CATS[p.cat]||CATS.peculiar).e+' '+(CATS[p.cat]||CATS.peculiar).n+'</span> <b>'+esc(p.title)+'</b>'+(k&&stopName[k]?'<div class="mini" style="margin-top:4px">📍 '+esc(stopName[k])+'</div>':'')+(p.photoUrl?'<img src="'+esc(p.photoUrl)+'">':'')+(p.note?'<p>'+esc(p.note)+'</p>':'')+(p.info?'<p class="mini" style="color:#f3ead6">ℹ️ '+esc(p.info)+'</p>':'')+'<div class="mini">por '+esc(p.author||'alguien')+'</div><div class="actions"><button class="sec" onclick="goPlace(\''+p.id+'\')">Ver en mapa</button>'+(mine?'<button class="sec" onclick="delPlace(\''+p.id+'\')">Eliminar</button>':'')+'</div></div>';
+    }).join('');
+  });
+  box.innerHTML=html;
 }
 function renderReplayCheck(){
   const box=document.getElementById('replayCheck'); if(!box) return;
   const t=trip(); const btn=document.getElementById('btnReplay');
   const hasTrip=!!session; const km=t?trackKm(t.track):0; const hasTrack=!!t && t.track.length>=2; const nPlaces=t?t.places.length:0;
   box.innerHTML=
-    '<li>'+(hasTrip?'✅':'⬜')+' <b>Viaje creado</b>'+(t?': '+esc(t.name):(hasTrip?'':' — créalo o únete en Empezar'))+'</li>'+
-    '<li>'+(hasTrack?'✅':'⬜')+' <b>Recorrido grabado</b>'+(hasTrack?': '+km.toFixed(2)+' km revelados':' — ve a Mapa y pulsa Grabar o Simular paseo')+'</li>'+
-    '<li>'+(nPlaces?'✅':'⬜')+' <b>Lugares con foto</b>: '+nPlaces+' (opcional, pero lucen mucho en el replay)</li>';
+    '<li>'+(hasTrip?'✅':'⬜')+' <b>Viaje</b>'+(t?': '+esc(t.name):'')+'</li>'+
+    '<li>'+(hasTrack?'✅':'⬜')+' <b>Recorrido</b>'+(hasTrack?': '+km.toFixed(2)+' km':' — falta grabar')+'</li>'+
+    '<li>'+(nPlaces?'✅':'⬜')+' <b>Fotos</b>: '+nPlaces+'</li>';
   if(!hasTrip){ btn.textContent='Primero crea tu viaje o únete'; }
   else if(!hasTrack){ btn.textContent='Primero graba o simula un paseo'; }
   else { btn.textContent='▶ Ver Replay God\'s Eye (10 s)'; }
@@ -420,16 +431,30 @@ window.toggleDone=(id,done)=>apiAction(api('/api/stops/'+id,{method:'PATCH',body
 window.delayStop=id=>apiAction(api('/api/stops/'+id,{method:'PATCH',body:{delayMinutes:20}}),'Retraso +20 min aplicado desde esta parada.');
 window.delStop=id=>{ if(confirm('¿Eliminar esta parada de la ruta de todo el grupo?')) apiAction((async()=>{ const r=await fetch('/api/stops/'+id,{method:'DELETE',headers:{'X-Member-Token':session.memberToken}}); if(!r.ok){ const d=await r.json().catch(()=>({})); throw new Error(d.error||'Error '+r.status); } })(),'Parada eliminada.'); };
 window.pinStopHere=id=>{ const c=map.getCenter(); apiAction(api('/api/stops/'+id,{method:'PATCH',body:{lat:+c.lat.toFixed(6),lng:+c.lng.toFixed(6)}}),'Parada fijada en el centro del mapa.'); showTab('mapa'); };
-window.delPlace=id=>{ if(!session) return; const lp=(localData.places&&localData.places[session.tripId])||[]; localData.places[session.tripId]=lp.filter(p=>p.id!==id); saveLocal(); redraw(); };
+window.delPlace=id=>{ if(!session) return; if(!confirm('¿Eliminar esta foto del viaje?')) return; (async()=>{ try{ const r=await fetch('/api/places/'+id,{method:'DELETE',headers:{'X-Member-Token':session.memberToken}}); if(!r.ok){ const d=await r.json().catch(()=>({})); throw new Error(d.error||'Error '+r.status); } await refreshState(true); toast('Foto eliminada.'); }catch(e){ toast('Error: '+e.message); } })(); };
 window.goPlace=id=>{ const p=trip().places.find(x=>String(x.id)===String(id)); if(p){ showTab('mapa'); setTimeout(()=>{ map.setView([p.lat,p.lng],16); if(markers['p'+id]) markers['p'+id].openPopup(); },80); } };
 
 /* FORM TOGGLES */
 document.getElementById('btnToggleStopForm').onclick=()=>{ if(!isOrganizer()){ toast('Solo el organizador puede añadir paradas.'); return; } const w=document.getElementById('stopFormWrap'); const open=w.style.display!=='none'; w.style.display=open?'none':'block'; document.getElementById('btnToggleStopForm').textContent=open?'+ Añadir parada':'Cerrar formulario de parada'; };
-document.getElementById('btnTogglePlaceForm').onclick=()=>{ const w=document.getElementById('placeFormWrap'); const open=w.style.display!=='none'; w.style.display=open?'none':'block'; document.getElementById('btnTogglePlaceForm').textContent=open?'+ Añadir lugar con foto':'Cerrar formulario de lugar'; };
+function setPlaceCat(cat){ placeCat=cat; document.querySelectorAll('#catChips button').forEach(b=>b.classList.toggle('on',b.dataset.cat===cat)); }
+document.querySelectorAll('#catChips button').forEach(b=>b.onclick=()=>setPlaceCat(b.dataset.cat));
+function openPlaceForm(withCamera){
+  if(!session){ showTab('start'); toast('Primero entra en un viaje.'); return; }
+  showTab('lugares');
+  const w=document.getElementById('placeFormWrap'); w.style.display='block';
+  document.getElementById('btnTogglePlaceForm').textContent='Cerrar';
+  const t=trip(); const live=serverState && serverState.live; const nxt=live && live.nextStop;
+  const titleEl=document.getElementById('pTitle');
+  if(nxt && !titleEl.value){ titleEl.value=nxt.name; if(nxt.cat) setPlaceCat(nxt.cat); }
+  w.scrollIntoView({behavior:'smooth',block:'center'});
+  if(withCamera){ setTimeout(()=>document.getElementById('pPhoto').click(),250); }
+}
+document.getElementById('btnTogglePlaceForm').onclick=()=>{ const w=document.getElementById('placeFormWrap'); const open=w.style.display!=='none'; if(open){ w.style.display='none'; document.getElementById('btnTogglePlaceForm').textContent='📸 Añadir foto'; } else openPlaceForm(false); };
+document.getElementById('btnFabCam').onclick=()=>openPlaceForm(true);
 
 /* SESION: crear / unirse / salir */
 function setSessionFromResponse(d, nickname){
-  session={tripId:d.trip.id, inviteCode:d.trip.inviteCode, memberToken:d.memberToken, nickname:(d.member&&d.member.nickname)||nickname, role:(d.member&&d.member.role)||'member'};
+  session={tripId:d.trip.id, inviteCode:d.trip.inviteCode, memberToken:d.memberToken, memberId:(d.member&&d.member.id)||'', nickname:(d.member&&d.member.nickname)||nickname, role:(d.member&&d.member.role)||'member'};
   saveSession();
 }
 document.getElementById('btnCreate').onclick=async()=>{
@@ -479,31 +504,40 @@ function shareInvite(){
   window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank');
   toast('Invitación generada y copiada. WhatsApp abierto.');
 }
-document.getElementById('btnShare').onclick=shareInvite;
+{ const _bs=document.getElementById('btnShare'); if(_bs) _bs.onclick=shareInvite; }
 // ?join=CODIGO: pre-rellena Unirme. ?ruta= antiguo ya no se usa (la ruta vive en el servidor).
 (function bootParams(){
   const q=new URLSearchParams(location.search); const j=q.get('join');
-  if(j){ document.getElementById('jCode').value=j.toUpperCase(); const b=document.getElementById('importBanner'); b.style.display='block'; b.innerHTML='<b>Te han invitado a un viaje.</b> Pon tu apodo abajo en «Unirme a un viaje» — el código <span class="kbd">'+esc(j.toUpperCase())+'</span> ya está rellenado.'; }
-  if(q.get('ruta')){ const b=document.getElementById('importBanner'); b.style.display='block'; b.innerHTML='<b>Este enlace es de la versión anterior.</b> Ahora la ruta vive en el servidor: pide al organizador el <b>código de 6 letras</b> y entra en «Unirme a un viaje».'; }
+  if(j){ document.getElementById('jCode').value=j.toUpperCase(); const b=document.getElementById('importBanner'); b.style.display='block'; b.innerHTML='Invitación: pon tu apodo y entra 👇'; }
+  if(q.get('ruta')){ const b=document.getElementById('importBanner'); b.style.display='block'; b.innerHTML='Enlace antiguo: entra con el <b>código</b> del viaje.'; }
   if(q.get('join')||q.get('ruta')) history.replaceState({},'',location.pathname);
 })();
 
-/* PLACES / PHOTOS (2A: aun locales en este movil; la estructura ya viene del servidor si hay places) */
+/* PLACES / PHOTOS — en servidor (2B), visibles para todo el grupo */
 document.getElementById('pPhoto').addEventListener('change',e=>{
   const f=e.target.files[0]; if(!f) return;
   const img=new Image();
-  img.onload=()=>{ const cv=document.createElement('canvas'); const sc=Math.min(1,900/img.width); cv.width=img.width*sc; cv.height=img.height*sc; cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height); photoData=cv.toDataURL('image/jpeg',.72); const pr=document.getElementById('pPreview'); pr.src=photoData; pr.style.display='block'; document.getElementById('photoWarn').textContent='Foto lista (~'+Math.round(photoData.length/1024)+' KB). Se guardará en este móvil.'; URL.revokeObjectURL(img.src); };
+  img.onload=()=>{ const cv=document.createElement('canvas'); const sc=Math.min(1,900/Math.max(img.width,1)); cv.width=Math.round(img.width*sc); cv.height=Math.round(img.height*sc); cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height); photoData=cv.toDataURL('image/jpeg',.72); const pr=document.getElementById('pPreview'); pr.src=photoData; pr.style.display='block'; document.getElementById('photoWarn').textContent='Foto lista. Dale a Guardar.'; URL.revokeObjectURL(img.src); };
   img.src=URL.createObjectURL(f);
 });
-document.getElementById('btnPlace').onclick=()=>{
-  if(!session){ toast('Crea primero un viaje o únete con el código.'); showTab('start'); return; }
-  const title=document.getElementById('pTitle').value.trim(); if(!title){ toast('Pon un título al lugar.'); return; }
-  const c=map.getCenter();
-  if(!localData.places) localData.places={};
-  if(!localData.places[session.tripId]) localData.places[session.tripId]=[];
-  localData.places[session.tripId].push({id:'loc-'+Date.now().toString(36),title:title,cat:document.getElementById('pCat').value,note:document.getElementById('pNote').value.trim(),info:document.getElementById('pInfo').value.trim(),photo:photoData,lat:+c.lat.toFixed(6),lng:+c.lng.toFixed(6)});
-  photoData=''; document.getElementById('pPreview').style.display='none'; document.getElementById('pPhoto').value='';
-  saveLocal(); redraw(); document.getElementById('placeFormWrap').style.display='none'; document.getElementById('btnTogglePlaceForm').textContent='+ Añadir lugar con foto'; toast('Lugar añadido en este móvil. En la 2B se compartirá con el grupo.');
+function nearestStopId(lat,lng){
+  const t=trip(); if(!t||!t.stops.length) return '';
+  let best='',bd=1e9;
+  t.stops.forEach(s=>{ if(s.lat!=null){ const d=hav([lat,lng],[s.lat,s.lng]); if(d<bd){bd=d;best=s.id;} } });
+  if(best && bd<=2) return best;
+  const live=serverState && serverState.live; return (live&&live.nextStop)?live.nextStop.id:'';
+}
+document.getElementById('btnPlace').onclick=async()=>{
+  if(!session){ showTab('start'); toast('Primero entra en un viaje.'); return; }
+  const title=document.getElementById('pTitle').value.trim(); if(!title){ toast('Pon un título.'); return; }
+  const pos=lastPos||(()=>{const c=map.getCenter();return[c.lat,c.lng];})();
+  const lat=+pos[0].toFixed(6), lng=+pos[1].toFixed(6);
+  try{
+    await api('/api/trips/'+session.tripId+'/places',{method:'POST', body:{title:title, cat:placeCat, note:document.getElementById('pNote').value.trim(), info:document.getElementById('pInfo').value.trim(), photo:photoData||'', lat:lat, lng:lng, stopId:nearestStopId(lat,lng)}});
+    photoData=''; document.getElementById('pPreview').style.display='none'; document.getElementById('pPhoto').value=''; document.getElementById('photoWarn').textContent=''; document.getElementById('pTitle').value=''; document.getElementById('pNote').value='';
+    document.getElementById('placeFormWrap').style.display='none'; document.getElementById('btnTogglePlaceForm').textContent='📸 Añadir foto';
+    await refreshState(true); toast('Guardado en el viaje 📸');
+  }catch(e){ toast('Error: '+e.message); }
 };
 
 /* GPS */
@@ -542,17 +576,39 @@ document.getElementById('btnSim').onclick=()=>{
   simTimer=setInterval(()=>{ i++; ang+=(Math.random()-.5)*.7; const step=.0016; lat+=Math.cos(ang)*step; lng+=Math.sin(ang)*step*1.35; pushPoint(lat,lng); if(i>=42){ stopRec(); toast('Paseo simulado terminado. Ahora sí: ve a la pestaña Replay.'); } },180);
 };
 
-/* REPLAY GOD'S EYE (~10 s) */
-let replayTimer=null, replayGroup=null;
+/* REPLAY GOD'S EYE — con parada en cada sitio */
+let replayTimer=null, replayGroup=null, replayPause=null;
+function orderedPlacesByTrack(t){
+  const out=[];
+  (t.places||[]).forEach(p=>{
+    if(p.lat==null||p.lng==null) return;
+    let bi=0,bd=1e18;
+    t.track.forEach((pt,i)=>{ const d=hav(pt,[p.lat,p.lng]); if(d<bd){bd=d;bi=i;} });
+    out.push({place:p, idx:bi, dist:bd});
+  });
+  return out.sort((a,b)=>a.idx-b.idx);
+}
 function cleanupReplay(){
-  if(replayTimer){ clearInterval(replayTimer); replayTimer=null; }
+  if(replayTimer){ clearInterval(replayTimer); clearTimeout(replayTimer); replayTimer=null; }
+  if(replayPause){ clearTimeout(replayPause); replayPause=null; }
   if(replayGroup){ try{map.removeLayer(replayGroup);}catch(e){} replayGroup=null; }
   const bar=document.getElementById('replayBar'); if(bar) bar.style.display='none';
   const prog=document.getElementById('replayProg'); if(prog) prog.style.width='0%';
+  const ov=document.getElementById('rpOverlay'); if(ov) ov.style.display='none';
 }
+function showPlaceOverlay(p){
+  const ov=document.getElementById('rpOverlay'); if(!ov) return;
+  document.getElementById('rpImg').src=p.photoUrl||'';
+  document.getElementById('rpImg').style.display=p.photoUrl?'block':'none';
+  document.getElementById('rpTitle').textContent=(CATS[p.cat]||CATS.peculiar).e+' '+p.title;
+  document.getElementById('rpNote').textContent=((p.author?'por '+p.author+' · ':'')+(p.note||''));
+  ov.style.display='block';
+  updateReplayBar(undefined,p.title);
+}
+function hidePlaceOverlay(){ const ov=document.getElementById('rpOverlay'); if(ov) ov.style.display='none'; }
 function updateReplayBar(pct, placeTitle){
   const bar=document.getElementById('replayBar'); if(bar) bar.style.display='block';
-  const prog=document.getElementById('replayProg'); if(prog) prog.style.width=Math.min(100,Math.max(0,pct))+'%';
+  const prog=document.getElementById('replayProg'); if(prog && pct!==undefined) prog.style.width=Math.min(100,Math.max(0,pct))+'%';
   if(placeTitle){ const pl=document.getElementById('replayPlace'); if(pl) pl.textContent='📍 '+placeTitle; }
 }
 document.getElementById('btnStopReplay').onclick=()=>{
@@ -572,7 +628,7 @@ function startReplay(){
   stopRec();
   cleanupReplay();
   const card=document.getElementById('replayCard'); card.style.display='block';
-  card.innerHTML='<b>▶ Replay God\'s Eye de '+esc(t.name)+'</b><p class="mini">Sobrevolando tu recorrido en el Mapa…</p>';
+  card.innerHTML='<b>▶ Replay de '+esc(t.name)+'</b>';
   showTab('mapa');
   const mapEl=document.getElementById('map');
   setTimeout(()=>{ if(mapEl) mapEl.scrollIntoView({behavior:'smooth',block:'center'}); },80);
@@ -586,13 +642,14 @@ function startReplay(){
       if(trackKm(t.track)<2 && map.getZoom()<14){ map.setZoom(14); }
     }catch(e){}
     replayGroup=L.layerGroup().addTo(map);
-    const N=t.track.length; const dur=10000; const stepMs=Math.max(30,dur/N); let i=0; const shown=new Set();
+    const ordered=orderedPlacesByTrack(t);
+    const N=t.track.length; const stepMs=Math.max(30,8000/Math.max(N-1,1)); let i=0; const shown=new Set();
     let curLine=null, prev=null;
-    replayTimer=setInterval(()=>{
+    function step(){
       if(i>=N){
-        clearInterval(replayTimer); replayTimer=null;
+        replayTimer=null;
         updateReplayBar(100);
-        setTimeout(()=>finishReplay(t),800);
+        replayPause=setTimeout(()=>finishReplay(t),800);
         return;
       }
       const p=t.track[i];
@@ -601,12 +658,125 @@ function startReplay(){
       else { curLine.addLatLng(p); }
       prev=p;
       try{ map.panTo(p,{animate:true}); if(trackKm(t.track)<2 && map.getZoom()<14) map.setZoom(14); }catch(e){}
-      t.places.forEach(pl=>{ if(!shown.has(pl.id) && hav(p,[pl.lat,pl.lng])<.35){ shown.add(pl.id); if(markers['p'+pl.id]) markers['p'+pl.id].openPopup(); updateReplayBar(Math.round(((i+1)/N)*100), pl.title); } });
       updateReplayBar(Math.round(((i+1)/N)*100));
       i++;
-    },stepMs);
+      const hit=ordered.find(o=>!shown.has(o.place.id) && o.idx<=i-1);
+      if(hit){
+        shown.add(hit.place.id);
+        showPlaceOverlay(hit.place);
+        replayTimer=null;
+        replayPause=setTimeout(()=>{ hidePlaceOverlay(); replayTimer=setTimeout(step,60); },3000);
+        return;
+      }
+      replayTimer=setTimeout(step,stepMs);
+    }
+    step();
   },350);
 }
+/* --- Descargar Replay en vídeo (Canvas 720x1280, sin teselas) --- */
+function loadImgForCanvas(url){
+  return new Promise(res=>{ if(!url){res(null);return;} const im=new Image(); im.onload=()=>res(im); im.onerror=()=>res(null); im.src=url; });
+}
+function sleepMs(ms){ return new Promise(r=>setTimeout(r,ms)); }
+async function downloadReplayVideo(){
+  const t=trip(); const status=document.getElementById('dlStatus');
+  function say(m){ status.style.display='block'; status.textContent=m; }
+  if(!session){ showTab('start'); return; }
+  if(!t || t.track.length<2){ showTab('mapa'); toast('Te falta recorrido: graba o simula primero.'); return; }
+  say('Grabando replay… no cambies de pestaña.');
+  document.getElementById('btnDownloadReplay').disabled=true;
+  try{
+    const W=720,H=1280, cv=document.createElement('canvas'); cv.width=W; cv.height=H;
+    const ctx=cv.getContext('2d');
+    const ordered=orderedPlacesByTrack(t);
+    const holdMs=ordered.length>6?1800:2500;
+    const imgs={};
+    for(const o of ordered){ imgs[o.place.id]=await loadImgForCanvas(o.place.photoUrl); }
+    let minLat=1e9,maxLat=-1e9,minLng=1e9,maxLng=-1e9;
+    t.track.concat(ordered.map(o=>[o.place.lat,o.place.lng])).forEach(p=>{ minLat=Math.min(minLat,p[0]); maxLat=Math.max(maxLat,p[0]); minLng=Math.min(minLng,p[1]); maxLng=Math.max(maxLng,p[1]); });
+    if(maxLat-minLat<0.002){ maxLat+=0.001; minLat-=0.001; } if(maxLng-minLng<0.002){ maxLng+=0.001; minLng-=0.001; }
+    function px(p){ return [60+(p[1]-minLng)/(maxLng-minLng)*600, 190+(1-(p[0]-minLat)/(maxLat-minLat))*800]; }
+    function drawFrame(frac, active){
+      ctx.fillStyle='#14100c'; ctx.fillRect(0,0,W,H);
+      ctx.fillStyle='#e8c877'; ctx.font='bold 42px system-ui,sans-serif'; ctx.textAlign='center';
+      ctx.fillText("God's Eye — "+t.name, W/2, 90);
+      ctx.fillStyle='#b8a888'; ctx.font='26px system-ui,sans-serif';
+      ctx.fillText(trackKm(t.track).toFixed(2)+' km · '+t.stops.length+' paradas · '+t.places.length+' fotos', W/2, 135);
+      // paradas
+      t.stops.forEach(s=>{ if(s.lat==null) return; const [x,y]=px([s.lat,s.lng]); ctx.beginPath(); ctx.arc(x,y,10,0,7); ctx.fillStyle=s.done?'#7fb069':'#f3ead6'; ctx.fill(); });
+      // trazo progresivo por segmentos (sin saltos)
+      const upto=Math.max(2,Math.floor(frac*(t.track.length-1)));
+      ctx.strokeStyle='#e8c877'; ctx.lineWidth=7; ctx.lineJoin='round'; ctx.lineCap='round';
+      segmentsOf(t.track.slice(0,upto+1)).forEach(seg=>{
+        if(seg.length<2 && seg.length===1){ const [x,y]=px(seg[0]); ctx.beginPath(); ctx.arc(x,y,5,0,7); ctx.fillStyle='#e8c877'; ctx.fill(); return; }
+        ctx.beginPath(); seg.forEach((p,j)=>{ const [x,y]=px(p); j?ctx.lineTo(x,y):ctx.moveTo(x,y); }); ctx.stroke();
+      });
+      // puntos de lugares
+      ordered.forEach(o=>{ const [x,y]=px([o.place.lat,o.place.lng]); ctx.beginPath(); ctx.arc(x,y,12,0,7); ctx.fillStyle=(CATS[o.place.cat]||CATS.peculiar).c; ctx.fill(); ctx.strokeStyle='#14100c'; ctx.lineWidth=3; ctx.stroke(); });
+      if(active){
+        const im=imgs[active.place.id];
+        ctx.fillStyle='rgba(29,23,16,0.97)'; ctx.fillRect(30,1010,W-60,240);
+        ctx.strokeStyle='#d9a441'; ctx.lineWidth=3; ctx.strokeRect(30,1010,W-60,240);
+        if(im){ const iw=300, ih=210; ctx.save(); ctx.beginPath(); ctx.rect(50,1025,iw,ih); ctx.clip(); const sc=Math.max(iw/im.width,ih/im.height); ctx.drawImage(im,50-(im.width*sc-iw)/2,1025-(im.height*sc-ih)/2,im.width*sc,im.height*sc); ctx.restore(); }
+        ctx.fillStyle='#f3ead6'; ctx.font='bold 30px system-ui,sans-serif'; ctx.textAlign='left';
+        ctx.fillText(active.place.title.slice(0,26), 370, 1075);
+        ctx.fillStyle='#b8a888'; ctx.font='24px system-ui,sans-serif';
+        ctx.fillText(((active.place.author?'por '+active.place.author:'')+'').slice(0,30), 370, 1115);
+        ctx.fillText((active.place.note||'').slice(0,30), 370, 1155);
+      }
+      ctx.fillStyle='#d9a441'; ctx.fillRect(0,H-14, W*Math.min(1,frac), 14);
+    }
+    const canRecord=('captureStream' in cv) && (typeof MediaRecorder!=='undefined');
+    if(!canRecord){
+      drawFrame(1, ordered.length?ordered[ordered.length-1]:null);
+      const a=document.createElement('a'); a.download='replay-'+t.name.replace(/\s+/g,'-')+'.png'; a.href=cv.toDataURL('image/png'); a.click();
+      say('Este navegador no graba vídeo: te he descargado la tarjeta final en PNG.');
+      return;
+    }
+    const mime=['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'].find(m=>{try{return MediaRecorder.isTypeSupported(m);}catch(e){return false;}}) || '';
+    const stream=cv.captureStream(30);
+    const rec=new MediaRecorder(stream, mime?{mimeType:mime}:undefined);
+    const chunks=[]; rec.ondataavailable=e=>{ if(e.data&&e.data.size) chunks.push(e.data); };
+    const stopped=new Promise(r=>rec.onstop=r);
+    rec.start(250);
+    const baseMs=8000, totalMs=baseMs+ordered.length*holdMs;
+    const t0=performance.now(); let nextPlace=0, holdUntil=0, active=null;
+    await new Promise(done=>{
+      function frame(now){
+        const elapsed=now-t0;
+        if(nextPlace<ordered.length && !active){
+          const fracNeeded=ordered[nextPlace].idx/Math.max(t.track.length-1,1);
+          const trackElapsed=elapsed - nextPlace*holdMs;
+          if(trackElapsed/baseMs >= fracNeeded){ active=ordered[nextPlace]; holdUntil=now+holdMs; }
+        }
+        let frac;
+        if(active){
+          frac=ordered[nextPlace].idx/Math.max(t.track.length-1,1);
+          if(now>=holdUntil){ active=null; nextPlace++; }
+        } else {
+          frac=Math.min(1,(elapsed - nextPlace*holdMs - (active?0:0))/baseMs);
+          frac=Math.min(1,(elapsed - (nextPlace*holdMs))/baseMs);
+          if(ordered.length && nextPlace>=ordered.length) frac=Math.min(1,elapsed/totalMs*1.15);
+        }
+        if(elapsed>=totalMs && nextPlace>=ordered.length){ drawFrame(1,null); done(); return; }
+        if(elapsed>=totalMs){ drawFrame(1,null); done(); return; }
+        drawFrame(Math.max(0,Math.min(1,frac)), active);
+        say('Grabando replay… '+Math.min(99,Math.round(elapsed/totalMs*100))+'% — no cambies de pestaña.');
+        requestAnimationFrame(frame);
+      }
+      requestAnimationFrame(frame);
+    });
+    await sleepMs(120);
+    rec.stop(); await stopped;
+    const blob=new Blob(chunks,{type:mime||'video/webm'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a'); a.href=url; a.download='replay-'+t.name.replace(/\s+/g,'-')+'.webm'; a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),4000);
+    say('Vídeo descargado ✔ Compártelo donde quieras.');
+  }catch(e){ say('No se pudo generar: '+e.message); }
+  finally{ document.getElementById('btnDownloadReplay').disabled=false; }
+}
+document.getElementById('btnDownloadReplay').onclick=downloadReplayVideo;
 document.getElementById('btnReplay').onclick=()=>{
   const t=trip();
   if(!session){ showTab('start'); toast('Primero crea tu viaje o únete con el código.'); return; }
