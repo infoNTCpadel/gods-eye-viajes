@@ -3,9 +3,17 @@ services:
     build: .
     container_name: gods-eye-viajes
     restart: unless-stopped
+    environment:
+      DATA_DIR: /data
+      PORT: "80"
+    volumes:
+      - gods-eye-data:/data
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.godseye.entrypoints=websecure"
       - "traefik.http.routers.godseye.rule=Host(`${DOMAIN:-viajes.ntcpadel.com}`)"
       - "traefik.http.routers.godseye.tls.certresolver=letsencrypt"
       - "traefik.http.services.godseye.loadbalancer.server.port=80"
+
+volumes:
+  gods-eye-data:

@@ -1,75 +1,78 @@
-GOD'S EYE VIAJES — Fase 1 (PWA para tu VPS)
-==============================================
+GOD'S EYE VIAJES — Fase 2A (viaje privado compartido, en tu VPS)
+================================================================
 
-Que es: app de viaje generica God's Eye (oscuro tierra/oro). El mapa se
-revela con tu trazo dorado, ruta del organizador compartible por enlace
-de WhatsApp (sin servidor), lugares/fotos guardados en el movil.
-Sin backend, sin cuentas, sin claves. Todo queda en el navegador de
-cada movil (localStorage). Dominio por defecto: viajes.ntcpadel.com
+Que es ahora: app de viaje generica God's Eye (oscuro tierra/oro).
+El organizador crea un VIAJE PRIVADO y comparte un CODIGO de 6 letras.
+El resto entra con ese codigo y su apodo: sin cuentas ni email.
+La ruta (paradas, horas, hecho/retraso/reordenar) vive EN EL SERVIDOR
+(volumen Docker gods-eye-data, SQLite en /data/app.db), asi que todo el
+grupo ve lo mismo: "Ahora toca", proximo punto, cuanto queda segun
+horario y progreso de paradas. Los miembros pueden marcar "Hemos
+llegado" en la proxima parada; editar/reordenar/retrasar/borrar es
+solo del organizador (rol del creador).
+El GPS, tus lugares/fotos y el Replay siguen en tu movil por ahora
+(la comparticion facil de fotos de todos sera la Fase 2B).
+Dominio por defecto: viajes.ntcpadel.com
 
-ANTES DE DESPLEGAR (2 min)
-----------------------------
-1) Registro DNS A: crea un registro A de "viajes" en ntcpadel.com
-   apuntando a la IP publica de tu VPS. Espera a que resuelva:
-   en el VPS:  getent hosts viajes.ntcpadel.com
-   Si prefieres otro dominio, cambia DOMAIN en el .env (paso 3).
-2) Red de Traefik: tu Traefik solo enruta contenedores que comparten
-   su red. Averigua cual es:
-     docker network ls
-     docker inspect <contenedor-traefik> --format '{{json .NetworkSettings.Networks}}'
-   Pon ese nombre en TRAEFIK_NETWORK del .env (por defecto: web).
-   En la PWA de knbacademy no hizo falta porque ya compartian red;
-   aqui, si Traefik no ve el contenedor, es por la red.
+DESPLIEGUE EN EL VPS (repo GitHub: infoNTCpadel/gods-eye-viajes)
+-----------------------------------------------------------------
+Ya desplegado antes? Solo actualiza:
+  cd /opt/gods-eye-viajes
+  git pull
+  docker compose up -d --build
+  curl -s https://viajes.ntcpadel.com/api/health     -> {"ok": true}
 
-DESPLIEGUE EN EL VPS (en /opt/gods-eye-viajes)
-----------------------------------------------
-Desde el movil con tu cliente SSH, o desde una terminal:
-  1. Sube el zip al VPS y descomprimelo (crea la carpeta sola):
-       cd /opt && unzip gods-eye-viajes-vps-v1.zip
-       cd /opt/gods-eye-viajes-vps
-     Dentro deben estar juntos:
-     index.html  manifest.json  sw.js  icon.svg  icon-*.png
-     Dockerfile  docker-compose.yml  .env.example  README.txt
-  2. cp .env.example .env  y edita DOMAIN (y TRAEFIK_NETWORK si toca).
-  3. docker compose up -d --build
-  4. Comprueba:  docker ps | grep gods-eye  y  docker logs gods-eye-viajes
-  5. Abre https://viajes.ntcpadel.com en el movil.
-     Menu del navegador -> "Anadir a pantalla de inicio" (queda como app).
+Despliegue desde cero:
+  1. DNS: registro A de "viajes" en ntcpadel.com a la IP del VPS.
+     Comprueba: getent hosts viajes.ntcpadel.com
+  2. cd /opt && git clone https://github.com/infoNTCpadel/gods-eye-viajes.git
+     cd gods-eye-viajes
+  3. cp .env.example .env  (solo contiene DOMAIN=viajes.ntcpadel.com;
+     cambia el dominio ahi si usas otro)
+  4. docker compose up -d --build
+     - Un solo contenedor python:3-alpine con server.py (solo libreria
+       estandar; sirve la PWA y la API /api/ en el puerto 80 interno)
+     - Volumen nuevo: gods-eye-data en /data. AHI viven los viajes.
+       No hagas "docker compose down -v" o borras los viajes del grupo.
+  5. Comprueba: docker compose ps ; curl -s https://viajes.ntcpadel.com/api/health
+  6. Abre https://viajes.ntcpadel.com en el movil e instala la PWA
+     (menu -> "Anadir a pantalla de inicio").
 
-COMO PROBARLO EN 2 MINUTOS (sin salir de casa)
-----------------------------------------------
-  1. "Crear viaje": nombre y fechas. Apunta el codigo local.
-  2. Organizer: anade 2 paradas (bodega 11:00, pueblo 13:30), con su
-     "que hacer". Prueba "↑/↓", "+20 min retraso" y "✓ Hecho".
-     "Ahora toca" debe mostrar la primera sin hacer.
-  3. Pulsa "Compartir ruta": se genera un enlace ?ruta=... (copiado) y
-     se abre WhatsApp. Envialo a un amigo: al abrirlo importa la ruta.
-  4. Pulsa "Simular paseo": veras dibujarse el trazo dorado sin GPS.
-     Luego "Grabar" con GPS real cuando salgas a andar.
-  5. Anade un "Lugar": mueve el mapa, titulo, nota, foto (vino/monumento),
-     pega la "info recabada" de internet. Queda pin y tarjeta.
-  6. "Replay God's Eye": sobrevuela el recorrido en ~10 s y cierra con
-     la tarjeta del viaje (km, paradas, lugares). Captura para compartir.
+COMO PROBARLO EN 2 MINUTOS (dos moviles o movil + navegador)
+--------------------------------------------------------------
+  1. Movil A: "Crear viaje privado" (nombre + tu apodo). Saldra un
+     CODIGO grande de 6 letras. Compartelo por WhatsApp (boton de
+     invitacion: el enlace lleva ?join=CODIGO y pre-rellena el codigo).
+  2. Movil B: abre el enlace, pon su apodo en "Unirme a un viaje" y
+     entra. Vera el mismo viaje y a los miembros en la cabecera.
+  3. Organizador (A): en Ruta, anade 2 paradas (bodega 11:00, pueblo
+     13:30) con su "que hacer". B las ve en segundos (sondeo cada 15 s).
+  4. Miembro (B): en la proxima parada pulsa "✓ Hemos llegado".
+     A ve el progreso 1/2 y el "Ahora toca" pasa a la segunda parada.
+  5. Organizador: prueba ↑/↓, "+20 min retraso" (mueve esa y las
+     siguientes) y "📍 Fijar en centro mapa".
+  6. Mapa: Grabar con GPS o "Simular paseo" para ver el trazo dorado;
+     Lugares y Replay God's Eye como antes.
 
-SI ALGO FALLA (Traefik 404 / no abre)
--------------------------------------
-- 404 de Traefik: contenedor y Traefik no comparten red. Revisa
-  TRAEFIK_NETWORK en .env y vuelve a "docker compose up -d". Confirma
-  con: docker inspect gods-eye-viajes --format '{{json .NetworkSettings.Networks}}'
-- Certificado no emitido: el registro A aun no resuelve o el dominio
-  no coincide con Host() (label en docker-compose.yml usa $DOMAIN).
-- La app abre pero sin mapa: necesitas internet para Leaflet/mapa; la
-  PWA cachea la app, no las teselas del mapa.
-- GPS no graba: en iOS/Android el GPS en el navegador exige HTTPS y
-  permiso de ubicacion; con pantalla apagada puede pausarse. Solucion
-  del piloto: pantalla encendida en el bolsillo o "Simular" para probar.
-  La version nativa (si el piloto valida) resuelve el segundo plano.
-- Fotos "desaparecen": estan en el localStorage de ESE navegador/movil.
-  No hay copia en servidor: exporta con capturas y el enlace de ruta.
-  Limite practico ~5 MB por movil (la app avisa y comprime a 900 px).
+SI ALGO FALLA
+--------------
+- /api/health no da {"ok": true}: el contenedor esta con la version
+  vieja (estatica) o cayendose. Mira: docker compose ps y
+  docker compose logs --tail=50 gods-eye-viajes ; luego git pull +
+  docker compose up -d --build.
+- 404 de Traefik o certificado autofirmado: el contenedor no esta Up
+  o Traefik no lo ve. Tu Traefik va en modo host y el compose, como
+  el de padel-app, no declara red externa: no anadas "networks".
+- "Sin conexion con el servidor del viaje" dentro de la app: estas en
+  una copia vieja en cache. Cierra y reabre la PWA (cache v4) o abre
+  la URL en una pestana nueva del navegador.
+- Codigo no existe al unirse: revisa mayusculas; el codigo no lleva
+  0/O/1/I para no confundirse al dictarlo.
+- GPS no graba: hace falta HTTPS (tu Traefik) y permiso de ubicacion;
+  con pantalla apagada el navegador puede pausarlo. Para probar sin
+  moverte: "Simular paseo".
 
-NOTA: es Fase 1 estatica a proposito: sin backend no hay mapa comun en
-vivo entre moviles. Cada amigo importa la ruta del organizador y revela
-su propio trazo; el Replay y las tarjetas se comparten por WhatsApp.
-Si el viaje valida el concepto, la Fase 2 anade servidor minimo en el
-mismo VPS para sincronizar grupo en tiempo real.
+NOTA DE FASES: esto es la 2A (viaje privado + ruta en vivo en el
+servidor). La 2B hara que las fotos/sitios de todos se anadan en 2
+toques y se vean en el mapa y muro comun del grupo; el Replay 3D tipo
+God's Eye iria despues, probado aparte por rendimiento en el movil.

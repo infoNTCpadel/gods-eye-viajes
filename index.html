@@ -65,6 +65,7 @@ a{color:#e8c877}
   <div class="brand">👁️ God's Eye Viajes</div>
   <div id="hdrTrip" class="tripname" style="display:none"></div>
   <div id="hdrNow" class="nowline" style="display:none"></div>
+  <div id="hdrMembers" class="nowline" style="display:none;font-size:12px;color:#b8a888"></div>
   <div class="row" id="hdrChangeRow" style="display:none"><button id="btnChangeTrip" class="sec">Cambiar viaje</button></div>
 </div>
 <div class="wrap">
@@ -77,26 +78,38 @@ a{color:#e8c877}
     <div class="card help">
       <b>En 3 pasos:</b>
       <ol>
-        <li><b>Crea el viaje</b> aquí abajo.</li>
-        <li>En <b>Ruta</b>, el organizador añade paradas con hora y qué hacer, y comparte el enlace.</li>
+        <li><b>Crea el viaje privado</b> o <b>únete con el código</b> que te pasen.</li>
+        <li>En <b>Ruta</b>, el organizador añade paradas con hora y qué hacer. Todos ven «Ahora toca» y cuánto queda.</li>
         <li>En <b>Mapa</b> dale a Grabar y muévete. Al final, tu <b>Replay</b> God's Eye.</li>
       </ol>
     </div>
+    <div id="serverError" class="card" style="display:none;border-color:#a63d40"><b>⚠️ Sin conexión con el servidor del viaje.</b><p class="mini" style="color:#f3ead6">No se ha podido contactar con <span class="kbd">/api/</span> en este servidor. Revisa que estás en viajes.ntcpadel.com con el despliegue nuevo (Fase 2A) y vuelve a intentarlo. Tus datos del viaje viven en el servidor, no en este móvil.</p></div>
+    <div id="sessionCard" class="card" style="display:none"></div>
     <div class="card">
-      <div id="noTrip">Crea tu primer viaje para empezar.</div>
-      <div id="tripInfo" style="display:none"></div>
+      <h2 style="margin-top:0">Crear viaje privado</h2>
+      <p class="mini" style="margin-top:0">Lo crea una persona y comparte el código. El resto entra con ese código, sin cuentas.</p>
       <label>Nombre del viaje<input id="tName" placeholder="Ej. Rioja y pueblos 2026"></label>
+      <label>Tu apodo<input id="tNick" placeholder="Ej. Mateo"></label>
       <div class="row" style="margin-top:0">
         <div><label>Desde<input id="tFrom" type="date"></label></div>
         <div><label>Hasta<input id="tTo" type="date"></label></div>
       </div>
       <div class="row">
-        <button id="btnCreate">Crear viaje y empezar →</button>
+        <button id="btnCreate">Crear viaje privado →</button>
       </div>
+    </div>
+    <div class="card">
+      <h2 style="margin-top:0">Unirme a un viaje</h2>
+      <label>Código del viaje<input id="jCode" placeholder="Ej. K7PX3M" style="text-transform:uppercase" maxlength="6"></label>
+      <label>Tu apodo<input id="jNick" placeholder="Ej. Ana"></label>
       <div class="row">
-        <button id="btnReset" class="sec">Borrar datos locales</button>
+        <button id="btnJoin" class="sec">Unirme con este código →</button>
       </div>
-      <p class="mini">Sin cuentas y sin servidor: todo se guarda en este móvil (localStorage). El código es solo local para identificar tu viaje en este dispositivo.</p>
+    </div>
+    <div id="inviteBox" class="card" style="display:none;border-color:#d9a441"></div>
+    <div class="card" id="leaveCard" style="display:none">
+      <div class="row"><button id="btnLeave" class="sec">Salir de este viaje en este móvil</button></div>
+      <p class="mini">Solo cierra tu sesión en este dispositivo. El viaje y su ruta siguen en el servidor para el grupo.</p>
     </div>
   </section>
 
@@ -159,9 +172,9 @@ a{color:#e8c877}
     </div>
     <div class="card">
       <b>Compartir con el grupo</b>
-      <p class="mini">Una persona crea la ruta y la comparte. Todo el grupo ve horas y qué toca en cada momento. El enlace lleva la ruta codificada en la propia URL (<span class="kbd">?ruta=...</span>), sin servidor. Quien lo abre importa esas paradas.</p>
-      <div class="row"><button id="btnShare" class="sec">🔗 Compartir ruta (WhatsApp)</button></div>
-      <div class="row"><input id="shareLink" readonly placeholder="Aquí saldrá tu enlace para compartir"></div>
+      <p class="mini">El viaje es privado: solo entra quien tenga el <b>código de 6 letras</b>. Comparte el enlace de invitación y cada uno pone su apodo.</p>
+      <div class="row"><button id="btnShare" class="sec">🔗 Compartir invitación (WhatsApp)</button></div>
+      <div class="row"><input id="shareLink" readonly placeholder="Aquí saldrá tu enlace de invitación"></div>
     </div>
   </section>
 
@@ -211,15 +224,28 @@ a{color:#e8c877}
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-const LS='godsEyeViajes_v1';
+const SES_KEY='godsEyeViajes_v2session';
+const DEV_KEY='godsEyeViajes_v2device';
+const LOC_KEY='godsEyeViajes_v2local';
 const CATS={bodega:{e:'🍷',c:'#c95d63',n:'Bodega'},pueblo:{e:'🏘️',c:'#d9a441',n:'Pueblo'},monumento:{e:'🏛️',c:'#7fb069',n:'Monumento'},mirador:{e:'🌄',c:'#4ea5d9',n:'Mirador'},comer:{e:'🍽️',c:'#e07a5f',n:'Comer'},peculiar:{e:'✨',c:'#b388eb',n:'Peculiar'}};
-let S=load()||{trips:[],activeId:null};
+let session=loadJson(SES_KEY,null);           // {tripId,inviteCode,memberToken,nickname,role}
+let serverState=null;                          // {trip,members,stops,places,live}
+let localData=loadJson(LOC_KEY,{tracks:{},places:{}}); // GPS/places locales por tripId (2A: aun locales)
 let photoData='';
-function save(){ try{ localStorage.setItem(LS,JSON.stringify(S)); const kb=(JSON.stringify(S).length/1024).toFixed(0); if(kb>3500) toast('Aviso: datos locales ~'+kb+' KB, cerca del límite del navegador (~5 MB). Reduce fotos.'); }catch(e){ toast('Sin espacio local: foto demasiado grande. Prueba con otra más pequeña.'); } }
-function load(){ try{return JSON.parse(localStorage.getItem(LS))}catch(e){return null} }
-function uid(){return Math.random().toString(36).slice(2,8).toUpperCase()}
-function trip(){ return S.trips.find(t=>t.id===S.activeId)||null }
-function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.style.display='block'; setTimeout(()=>t.style.display='none',3400); }
+let lastPos=null;
+function loadJson(k,d){ try{ const v=JSON.parse(localStorage.getItem(k)); return v==null?d:v; }catch(e){ return d; } }
+function saveSession(){ if(session) localStorage.setItem(SES_KEY,JSON.stringify(session)); else localStorage.removeItem(SES_KEY); }
+function saveLocal(){ try{ localStorage.setItem(LOC_KEY,JSON.stringify(localData)); }catch(e){ toast('Sin espacio local para fotos/puntos en este móvil.'); } }
+function deviceId(){ let d=localStorage.getItem(DEV_KEY); if(!d){ d='dev-'+Math.random().toString(36).slice(2)+Date.now().toString(36); localStorage.setItem(DEV_KEY,d); } return d; }
+function isOrganizer(){ return !!(session && session.role==='organizer'); }
+function localTrack(){ if(!session) return []; return (localData.tracks && localData.tracks[session.tripId])||[]; }
+function localPlaces(){ if(!session) return []; const lp=(localData.places && localData.places[session.tripId])||[]; const sp=(serverState && serverState.places)||[]; return sp.length?sp:lp; }
+function trip(){
+  if(!session || !serverState || !serverState.trip) return null;
+  const t=serverState.trip;
+  return {id:t.id, code:t.inviteCode, name:t.name, from:t.from||'', to:t.to||'', stops:serverState.stops||[], places:localPlaces(), track:localTrack()};
+}
+function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.style.display='block'; setTimeout(()=>t.style.display='none',3600); }
 function hav(a,b){ const R=6371,toRad=d=>d*Math.PI/180; const dLat=toRad(b[0]-a[0]),dLng=toRad(b[1]-a[1]); const h=Math.sin(dLat/2)**2+Math.cos(toRad(a[0]))*Math.cos(toRad(b[0]))*Math.sin(dLng/2)**2; return 2*R*Math.asin(Math.sqrt(h)); }
 const MAX_SEG_KM = 1;
 function segmentsOf(track){
@@ -232,8 +258,50 @@ function segmentsOf(track){
   return segs;
 }
 function trackKm(tr){ let k=0; const a=tr||[]; for(let i=1;i<a.length;i++){ const d=hav(a[i-1],a[i]); if(d<=MAX_SEG_KM) k+=d; } return k; }
-function addMin(time,mins){ let [h,m]=time.split(':').map(Number); let tot=h*60+m+mins; tot=((tot%1440)+1440)%1440; return String(Math.floor(tot/60)).padStart(2,'0')+':'+String(tot%60).padStart(2,'0'); }
 function esc(s){ return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function minsToNext(timeStr){
+  if(!timeStr) return null;
+  const now=new Date(); const parts=timeStr.split(':'); if(parts.length<2) return null;
+  const target=new Date(now.getFullYear(),now.getMonth(),now.getDate(),Number(parts[0]),Number(parts[1]));
+  return Math.round((target-now)/60000);
+}
+function quedanTxt(timeStr){
+  const m=minsToNext(timeStr); if(m===null) return '';
+  if(m>0) return ' · quedan '+m+' min según horario';
+  if(m===0) return ' · es ahora';
+  return ' · con '+Math.abs(m)+' min de retraso según horario';
+}
+
+/* API */
+async function api(path, opts){
+  opts=opts||{};
+  const headers=Object.assign({'Content-Type':'application/json'}, opts.headers||{});
+  if(session && session.memberToken && opts.auth!==false) headers['X-Member-Token']=session.memberToken;
+  const res=await fetch(path, {method:opts.method||'GET', headers:headers, body:opts.body?JSON.stringify(opts.body):undefined});
+  let data={}; try{ data=await res.json(); }catch(e){}
+  if(!res.ok){ const e=new Error(data.error||('Error '+res.status)); e.status=res.status; throw e; }
+  return data;
+}
+async function checkHealth(){
+  try{ const r=await fetch('/api/health'); const d=await r.json(); return !!d.ok; }
+  catch(e){ return false; }
+}
+async function refreshState(silent){
+  if(!session) { serverState=null; redraw(); return; }
+  try{
+    const st=await api('/api/trips/by-code/'+encodeURIComponent(session.inviteCode));
+    serverState=st;
+    if(st.trip){ session.tripId=st.trip.id; session.inviteCode=st.trip.inviteCode; saveSession(); }
+    redraw();
+  }catch(e){
+    if(e.status===401 || e.status===403){ session=null; saveSession(); serverState=null; redraw(); showTab('start'); toast('Tu sesión de viaje ya no vale. Vuelve a unirte con el código.'); }
+    else if(!silent){ toast('No se pudo actualizar el viaje: '+e.message); }
+  }
+}
+async function heartbeat(){
+  if(!session) return;
+  try{ await api('/api/trips/'+session.tripId+'/heartbeat', {method:'POST', body: lastPos?{lat:lastPos[0],lng:lastPos[1]}:{}}); }catch(e){}
+}
 
 /* TABS */
 function showTab(name){
@@ -246,7 +314,7 @@ function showTab(name){
   window.scrollTo({top:0,behavior:'smooth'});
 }
 document.querySelectorAll('#bottomNav button').forEach(b=>b.addEventListener('click',()=>{
-  if(!trip() && b.dataset.tab!=='start'){ showTab('start'); toast('Primero crea tu viaje aquí.'); return; }
+  if(!session && b.dataset.tab!=='start'){ showTab('start'); toast('Primero crea tu viaje o únete con el código.'); return; }
   showTab(b.dataset.tab);
 }));
 document.getElementById('btnChangeTrip').onclick=()=>showTab('start');
@@ -263,103 +331,164 @@ function drawTrackGroup(group,track,opts){
   });
 }
 let markers={};
-function divIcon(cat,txt){ return L.divIcon({className:'',html:'<div style="background:'+CATS[cat].c+';border:2px solid #14100c;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:15px;box-shadow:0 2px 10px #000">'+CATS[cat].e+'</div>',iconSize:[30,30],iconAnchor:[15,15]}); }
+function divIcon(cat){ return L.divIcon({className:'',html:'<div style="background:'+(CATS[cat]||CATS.peculiar).c+';border:2px solid #14100c;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:15px;box-shadow:0 2px 10px #000">'+(CATS[cat]||CATS.peculiar).e+'</div>',iconSize:[30,30],iconAnchor:[15,15]}); }
+function inviteLink(){ return location.origin+location.pathname+'?join='+encodeURIComponent(session?session.inviteCode:''); }
+function renderSession(){
+  const sc=document.getElementById('sessionCard'), ib=document.getElementById('inviteBox'), lc=document.getElementById('leaveCard');
+  const hdrT=document.getElementById('hdrTrip'), hdrN=document.getElementById('hdrNow'), hdrM=document.getElementById('hdrMembers'), hdrR=document.getElementById('hdrChangeRow');
+  if(!session){ sc.style.display='none'; ib.style.display='none'; lc.style.display='none'; hdrT.style.display='none'; hdrN.style.display='none'; hdrM.style.display='none'; hdrR.style.display='none'; return; }
+  const t=serverState && serverState.trip;
+  sc.style.display='block'; lc.style.display='block';
+  sc.innerHTML='<b>Estás dentro'+(t?': '+esc(t.name):'')+'</b><br><span class="mini">Tu apodo: <b style="color:#f3ead6">'+esc(session.nickname)+'</b> · Rol: <b style="color:#f3ead6">'+(isOrganizer()?'organizador':'miembro')+'</b><br>El viaje vive en el servidor: todo el grupo ve la misma ruta.</span>';
+  ib.style.display='block';
+  ib.innerHTML='<b>Código del viaje (privado)</b><div style="font-size:34px;letter-spacing:4px;color:#e8c877;font-weight:800;margin:8px 0">'+esc(session.inviteCode)+'</div><p class="mini">Pásalo solo a tu grupo. Con este código y su apodo, cada uno entra en el mismo viaje.</p><div class="row"><button id="btnShare2" class="sec">🔗 Compartir invitación (WhatsApp)</button></div><div class="row"><input id="shareLink2" readonly value="'+esc(inviteLink())+'"></div>';
+  const b2=document.getElementById('btnShare2'); if(b2) b2.onclick=shareInvite;
+  hdrT.style.display='block'; hdrT.textContent='👁️ '+(t?t.name:'Tu viaje');
+  hdrR.style.display='flex';
+  // members
+  const mem=(serverState && serverState.members)||[];
+  if(mem.length){ hdrM.style.display='block'; hdrM.textContent='👥 '+mem.map(m=>m.nickname+(m.role==='organizer'?' (organizador)':'')).join(' · '); }
+  // Ahora toca en cabecera
+  const live=serverState && serverState.live; const nxt=live && live.nextStop;
+  hdrN.style.display='block';
+  if(!serverState){ hdrN.innerHTML='Cargando el viaje…'; }
+  else if(nxt){ hdrN.innerHTML='Ahora toca: <b>'+esc(nxt.name)+'</b> · '+esc(nxt.time)+quedanTxt(nxt.time)+' · <b>'+live.done+'/'+live.total+' paradas</b>'; }
+  else if(live && live.total){ hdrN.innerHTML='Ruta completada 🎉 Ve a <b>Replay</b> · <b>'+live.done+'/'+live.total+' paradas</b>'; }
+  else { hdrN.innerHTML='Ahora toca: <b>crear la ruta en la pestaña Ruta</b>'; }
+  const sl=document.getElementById('shareLink'); if(sl) sl.value=inviteLink();
+}
 function redraw(){
+  renderSession();
   const t=trip();
-  document.getElementById('noTrip').style.display=t?'none':'block';
-  document.getElementById('tripInfo').style.display=t?'block':'none';
-  const hdrT=document.getElementById('hdrTrip'), hdrN=document.getElementById('hdrNow'), hdrR=document.getElementById('hdrChangeRow');
-  if(t){ hdrT.style.display='block'; hdrT.textContent='👁️ '+t.name; hdrR.style.display='flex'; document.getElementById('tripInfo').innerHTML='<b>'+esc(t.name)+'</b> · Código local: <span class="kbd">'+t.code+'</span><br><span class="mini">'+(t.from||'')+' → '+(t.to||'')+' · Creado en este móvil</span>'; }
-  else { hdrT.style.display='none'; hdrN.style.display='none'; hdrR.style.display='none'; }
   Object.values(markers).forEach(m=>map.removeLayer(m)); markers={};
   if(!t){ line.clearLayers(); renderStats(); renderTimeline(); renderPlaces(); renderReplayCheck(); return; }
   drawTrackGroup(line, t.track, {color:'#e8c877',weight:5,opacity:.95});
   if(window._plan) map.removeLayer(window._plan);
-  const pts=t.stops.filter(s=>s.lat).map(s=>[s.lat,s.lng]);
+  const pts=t.stops.filter(s=>s.lat!=null).map(s=>[s.lat,s.lng]);
   if(pts.length>1) window._plan=L.polyline(pts,{color:'#f3ead6',weight:2,dashArray:'6 8',opacity:.6}).addTo(map);
-  t.stops.forEach(s=>{ if(s.lat){ const m=L.marker([s.lat,s.lng],{icon:divIcon(s.cat)}).addTo(map).bindPopup('<span class="pinlbl">'+esc(s.name)+'</span><br>'+s.time+' · '+s.dur+' min<br>'+esc(s.do||'')); markers['s'+s.id]=m; }});
-  t.places.forEach(p=>{ const m=L.marker([p.lat,p.lng],{icon:divIcon(p.cat)}).addTo(map).bindPopup('<span class="pinlbl">'+esc(p.title)+'</span><br>'+esc(p.note||'')+'<br><i>'+esc(p.info||'')+'</i>'); markers['p'+p.id]=m; });
+  t.stops.forEach(s=>{ if(s.lat!=null){ const m=L.marker([s.lat,s.lng],{icon:divIcon(s.cat)}).addTo(map).bindPopup('<span class="pinlbl">'+esc(s.name)+'</span><br>'+esc(s.time)+' · '+s.dur+' min<br>'+esc(s.do||'')); markers['s'+s.id]=m; }});
+  t.places.forEach(p=>{ if(p.lat!=null){ const m=L.marker([p.lat,p.lng],{icon:divIcon(p.cat)}).addTo(map).bindPopup('<span class="pinlbl">'+esc(p.title)+'</span><br>'+esc(p.note||'')+'<br><i>'+esc(p.info||'')+'</i>'); markers['p'+p.id]=m; } });
   renderStats(); renderTimeline(); renderPlaces(); renderReplayCheck();
 }
 function renderStats(){ const t=trip(); document.getElementById('stKm').textContent=t?trackKm(t.track).toFixed(2)+' km':'0.00 km'; document.getElementById('stStops').textContent=t?t.stops.length:0; document.getElementById('stPlaces').textContent=t?t.places.length:0; }
 function renderTimeline(){
-  const t=trip(), box=document.getElementById('timeline'), now=document.getElementById('nowBox'), hdrN=document.getElementById('hdrNow');
-  if(!t||!t.stops.length){ box.innerHTML=t?'<p class="mini">Todavía no hay paradas. Pulsa «+ Añadir parada» y crea la primera: dónde, a qué hora y qué hacer allí.</p>':''; now.textContent=t?'Añade tu primera parada con el botón de abajo.':'Crea primero un viaje.'; hdrN.style.display=t?'block':'none'; if(t) hdrN.innerHTML='Ahora toca: <b>crear tu ruta en la pestaña Ruta</b>'; return; }
-  const nxt=t.stops.find(s=>!s.done);
-  now.innerHTML=nxt?('<b>'+esc(nxt.name)+'</b> · '+nxt.time+' · '+nxt.dur+' min<br>'+esc(nxt.do||'—')):'🎉 Ruta completada. ¡A por el Replay!';
-  hdrN.style.display='block';
-  hdrN.innerHTML=nxt?('Ahora toca: <b>'+esc(nxt.name)+'</b> · '+nxt.time):'Ruta completada 🎉 Ve a <b>Replay</b>';
-  box.innerHTML=t.stops.map((s,i)=>'<div class="stop '+(s.done?'done':'')+'"><div class="dot" style="background:'+CATS[s.cat].c+'"></div><div style="flex:1"><b class="st">'+CATS[s.cat].e+' '+esc(s.name)+'</b><br><span class="mini">'+s.time+' · '+s.dur+' min · '+CATS[s.cat].n+'</span><br><span class="mini">'+esc(s.do||'')+'</span><div class="actions"><button class="sec" onclick="moveStop(\''+s.id+'\',-1)">↑</button><button class="sec" onclick="moveStop(\''+s.id+'\',1)">↓</button><button class="sec" onclick="toggleDone(\''+s.id+'\')">'+(s.done?'Desmarcar':'✓ Hecho')+'</button><button class="sec" onclick="delayStop(\''+s.id+'\')">+20 min retraso</button><button class="sec" onclick="pinStopHere(\''+s.id+'\')">📍 Fijar en centro mapa</button><button class="sec" onclick="delStop(\''+s.id+'\')">Eliminar</button></div></div></div>').join('');
+  const box=document.getElementById('timeline'), now=document.getElementById('nowBox');
+  const t=trip(); const live=serverState && serverState.live;
+  if(!session){ box.innerHTML=''; now.textContent='Crea tu viaje o únete con el código.'; return; }
+  if(!t || !t.stops.length){ box.innerHTML=isOrganizer()?'<p class="mini">Todavía no hay paradas. Pulsa «+ Añadir parada» y crea la primera: dónde, a qué hora y qué hacer allí.</p>':'<p class="mini">El organizador aún no ha añadido paradas. Cuando las cree, las verás aquí al instante.</p>'; now.textContent=isOrganizer()?'Añade tu primera parada con el botón de abajo.':'Esperando la ruta del organizador…'; return; }
+  const nxt=live && live.nextStop;
+  now.innerHTML=nxt?('<b>'+esc(nxt.name)+'</b> · '+esc(nxt.time)+quedanTxt(nxt.time)+' · '+nxt.dur+' min<br>'+esc(nxt.do||'—')+'<br><span class="mini">Progreso: '+live.done+'/'+live.total+' paradas ('+live.progressPct+'%)</span>'):'🎉 Ruta completada. ¡A por el Replay!';
+  box.innerHTML=t.stops.map(s=>{
+    const isNext=nxt && nxt.id===s.id;
+    let actions='';
+    if(isOrganizer()){
+      actions='<button class="sec" onclick="moveStop(\''+s.id+'\',-1)">↑</button><button class="sec" onclick="moveStop(\''+s.id+'\',1)">↓</button><button class="sec" onclick="toggleDone(\''+s.id+'\','+(s.done?'false':'true')+')">'+(s.done?'Desmarcar':'✓ Hecho')+'</button><button class="sec" onclick="delayStop(\''+s.id+'\')">+20 min retraso</button><button class="sec" onclick="pinStopHere(\''+s.id+'\')">📍 Fijar en centro mapa</button><button class="sec" onclick="delStop(\''+s.id+'\')">Eliminar</button>';
+    } else if(isNext && !s.done){
+      actions='<button onclick="toggleDone(\''+s.id+'\',true)">✓ Hemos llegado</button>';
+    } else if(s.done){
+      actions='<button class="sec" onclick="toggleDone(\''+s.id+'\',false)">Desmarcar llegada</button>';
+    }
+    return '<div class="stop '+(s.done?'done':'')+'"'+(isNext?' style="border-color:#d9a441"':'')+'><div class="dot" style="background:'+(CATS[s.cat]||CATS.peculiar).c+'"></div><div style="flex:1"><b class="st">'+(CATS[s.cat]||CATS.peculiar).e+' '+esc(s.name)+'</b>'+(isNext?' <span class="badge" style="background:#d9a441">PRÓXIMA</span>':'')+'<br><span class="mini">'+esc(s.time)+' · '+s.dur+' min · '+(CATS[s.cat]||CATS.peculiar).n+'</span><br><span class="mini">'+esc(s.do||'')+'</span>'+(actions?'<div class="actions">'+actions+'</div>':'')+'</div></div>';
+  }).join('');
+  const addBtn=document.getElementById('btnToggleStopForm'); if(addBtn) addBtn.style.display=isOrganizer()?'block':'none';
+  const form=document.getElementById('stopFormWrap'); if(form && !isOrganizer()) form.style.display='none';
 }
 function renderPlaces(){
-  const t=trip(), box=document.getElementById('places');
+  const box=document.getElementById('places'); const t=trip();
   if(!t||!t.places.length){ box.innerHTML='<div class="card"><b>Aún no hay lugares.</b><p class="mini">Cuando estés en un sitio que quieras recordar —un vino, un monumento, un pueblo— pulsa el botón grande de abajo, haz la foto y guarda tu nota. Aparecerá aquí y como pin en el mapa.</p></div>'; return; }
-  box.innerHTML=t.places.map(p=>'<div class="card place"><span class="badge" style="background:'+CATS[p.cat].c+'">'+CATS[p.cat].e+' '+CATS[p.cat].n+'</span> <b>'+esc(p.title)+'</b>'+(p.photo?'<img src="'+p.photo+'">':'')+'<p>'+esc(p.note||'')+'</p>'+(p.info?'<p class="mini" style="color:#f3ead6">ℹ️ '+esc(p.info)+'</p>':'')+'<div class="actions"><button class="sec" onclick="goPlace(\''+p.id+'\')">Ver en mapa</button><button class="sec" onclick="delPlace(\''+p.id+'\')">Eliminar</button></div></div>').join('');
+  box.innerHTML=t.places.map(p=>'<div class="card place"><span class="badge" style="background:'+(CATS[p.cat]||CATS.peculiar).c+'">'+(CATS[p.cat]||CATS.peculiar).e+' '+(CATS[p.cat]||CATS.peculiar).n+'</span> <b>'+esc(p.title)+'</b>'+(p.photo?'<img src="'+p.photo+'">':'')+'<p>'+esc(p.note||'')+'</p>'+(p.info?'<p class="mini" style="color:#f3ead6">ℹ️ '+esc(p.info)+'</p>':'')+'<div class="actions"><button class="sec" onclick="goPlace(\''+p.id+'\')">Ver en mapa</button><button class="sec" onclick="delPlace(\''+p.id+'\')">Eliminar</button></div></div>').join('');
 }
 function renderReplayCheck(){
   const box=document.getElementById('replayCheck'); if(!box) return;
   const t=trip(); const btn=document.getElementById('btnReplay');
-  const hasTrip=!!t; const km=t?trackKm(t.track):0; const hasTrack=!!t && t.track.length>=2; const nPlaces=t?t.places.length:0;
+  const hasTrip=!!session; const km=t?trackKm(t.track):0; const hasTrack=!!t && t.track.length>=2; const nPlaces=t?t.places.length:0;
   box.innerHTML=
-    '<li>'+(hasTrip?'✅':'⬜')+' <b>Viaje creado</b>'+(hasTrip?': '+esc(t.name):' — créalo en Empezar')+'</li>'+
+    '<li>'+(hasTrip?'✅':'⬜')+' <b>Viaje creado</b>'+(t?': '+esc(t.name):(hasTrip?'':' — créalo o únete en Empezar'))+'</li>'+
     '<li>'+(hasTrack?'✅':'⬜')+' <b>Recorrido grabado</b>'+(hasTrack?': '+km.toFixed(2)+' km revelados':' — ve a Mapa y pulsa Grabar o Simular paseo')+'</li>'+
     '<li>'+(nPlaces?'✅':'⬜')+' <b>Lugares con foto</b>: '+nPlaces+' (opcional, pero lucen mucho en el replay)</li>';
-  if(!hasTrip){ btn.textContent='Primero crea tu viaje'; }
+  if(!hasTrip){ btn.textContent='Primero crea tu viaje o únete'; }
   else if(!hasTrack){ btn.textContent='Primero graba o simula un paseo'; }
   else { btn.textContent='▶ Ver Replay God\'s Eye (10 s)'; }
 }
-window.moveStop=(id,d)=>{ const t=trip(); const i=t.stops.findIndex(s=>s.id===id); const j=i+d; if(j<0||j>=t.stops.length) return; [t.stops[i],t.stops[j]]=[t.stops[j],t.stops[i]]; save(); redraw(); };
-window.toggleDone=id=>{ const s=trip().stops.find(x=>x.id===id); s.done=!s.done; save(); redraw(); };
-window.delayStop=id=>{ const t=trip(); const i=t.stops.findIndex(s=>s.id===id); for(let k=i;k<t.stops.length;k++) t.stops[k].time=addMin(t.stops[k].time,20); save(); redraw(); toast('Retraso +20 min aplicado desde esta parada.'); };
-window.delStop=id=>{ const t=trip(); t.stops=t.stops.filter(s=>s.id!==id); save(); redraw(); };
-window.pinStopHere=id=>{ const t=trip(); const s=t.stops.find(x=>x.id===id); const c=map.getCenter(); s.lat=+c.lat.toFixed(6); s.lng=+c.lng.toFixed(6); save(); redraw(); showTab('mapa'); toast('Parada fijada en el centro del mapa.'); };
-window.delPlace=id=>{ const t=trip(); t.places=t.places.filter(p=>p.id!==id); save(); redraw(); };
-window.goPlace=id=>{ const p=trip().places.find(x=>x.id===id); if(p){ showTab('mapa'); setTimeout(()=>{ map.setView([p.lat,p.lng],16); if(markers['p'+id]) markers['p'+id].openPopup(); },80); } };
+/* Acciones de parada -> API */
+async function apiAction(promise, okMsg){
+  try{ await promise; await refreshState(true); if(okMsg) toast(okMsg); }
+  catch(e){ toast('Error: '+e.message); }
+}
+window.moveStop=(id,d)=>apiAction(api('/api/stops/'+id,{method:'PATCH',body:{move:d}}));
+window.toggleDone=(id,done)=>apiAction(api('/api/stops/'+id,{method:'PATCH',body:{done:!!done}}), done?'Parada marcada: hemos llegado ✓':'Parada desmarcada.');
+window.delayStop=id=>apiAction(api('/api/stops/'+id,{method:'PATCH',body:{delayMinutes:20}}),'Retraso +20 min aplicado desde esta parada.');
+window.delStop=id=>{ if(confirm('¿Eliminar esta parada de la ruta de todo el grupo?')) apiAction((async()=>{ const r=await fetch('/api/stops/'+id,{method:'DELETE',headers:{'X-Member-Token':session.memberToken}}); if(!r.ok){ const d=await r.json().catch(()=>({})); throw new Error(d.error||'Error '+r.status); } })(),'Parada eliminada.'); };
+window.pinStopHere=id=>{ const c=map.getCenter(); apiAction(api('/api/stops/'+id,{method:'PATCH',body:{lat:+c.lat.toFixed(6),lng:+c.lng.toFixed(6)}}),'Parada fijada en el centro del mapa.'); showTab('mapa'); };
+window.delPlace=id=>{ if(!session) return; const lp=(localData.places&&localData.places[session.tripId])||[]; localData.places[session.tripId]=lp.filter(p=>p.id!==id); saveLocal(); redraw(); };
+window.goPlace=id=>{ const p=trip().places.find(x=>String(x.id)===String(id)); if(p){ showTab('mapa'); setTimeout(()=>{ map.setView([p.lat,p.lng],16); if(markers['p'+id]) markers['p'+id].openPopup(); },80); } };
 
 /* FORM TOGGLES */
-document.getElementById('btnToggleStopForm').onclick=()=>{ const w=document.getElementById('stopFormWrap'); const open=w.style.display!=='none'; w.style.display=open?'none':'block'; document.getElementById('btnToggleStopForm').textContent=open?'+ Añadir parada':'Cerrar formulario de parada'; };
+document.getElementById('btnToggleStopForm').onclick=()=>{ if(!isOrganizer()){ toast('Solo el organizador puede añadir paradas.'); return; } const w=document.getElementById('stopFormWrap'); const open=w.style.display!=='none'; w.style.display=open?'none':'block'; document.getElementById('btnToggleStopForm').textContent=open?'+ Añadir parada':'Cerrar formulario de parada'; };
 document.getElementById('btnTogglePlaceForm').onclick=()=>{ const w=document.getElementById('placeFormWrap'); const open=w.style.display!=='none'; w.style.display=open?'none':'block'; document.getElementById('btnTogglePlaceForm').textContent=open?'+ Añadir lugar con foto':'Cerrar formulario de lugar'; };
 
-/* TRIP */
-document.getElementById('btnCreate').onclick=()=>{
-  const name=document.getElementById('tName').value.trim(); if(!name){ toast('Pon un nombre al viaje.'); return; }
-  const nt={id:uid(),code:uid(),name,from:document.getElementById('tFrom').value,to:document.getElementById('tTo').value,stops:[],places:[],track:[]};
-  S.trips.push(nt); S.activeId=nt.id; save(); redraw(); toast('Viaje creado: '+name+'. Ahora ve a Ruta o a Mapa.'); showTab('ruta');
+/* SESION: crear / unirse / salir */
+function setSessionFromResponse(d, nickname){
+  session={tripId:d.trip.id, inviteCode:d.trip.inviteCode, memberToken:d.memberToken, nickname:(d.member&&d.member.nickname)||nickname, role:(d.member&&d.member.role)||'member'};
+  saveSession();
+}
+document.getElementById('btnCreate').onclick=async()=>{
+  const name=document.getElementById('tName').value.trim(); const nick=document.getElementById('tNick').value.trim();
+  if(!name){ toast('Pon un nombre al viaje.'); return; }
+  if(!nick){ toast('Pon tu apodo (así te verá el grupo).'); return; }
+  try{
+    const d=await api('/api/trips',{method:'POST', auth:false, body:{name:name, nickname:nick, from:document.getElementById('tFrom').value, to:document.getElementById('tTo').value, deviceId:deviceId()}});
+    setSessionFromResponse(d, nick);
+    await refreshState(true); heartbeat();
+    toast('Viaje privado creado. Tu código es '+session.inviteCode+' — compártelo solo con tu grupo.');
+    showTab('ruta');
+  }catch(e){ document.getElementById('serverError').style.display='block'; toast('Error al crear: '+e.message); }
 };
-document.getElementById('btnReset').onclick=()=>{ if(confirm('¿Borrar TODOS los datos locales de God\'s Eye Viajes en este móvil?')){ localStorage.removeItem(LS); S={trips:[],activeId:null}; save(); redraw(); showTab('start'); toast('Datos borrados.'); } };
+document.getElementById('btnJoin').onclick=async()=>{
+  const code=document.getElementById('jCode').value.trim().toUpperCase(); const nick=document.getElementById('jNick').value.trim();
+  if(!code){ toast('Pon el código del viaje.'); return; }
+  if(!nick){ toast('Pon tu apodo (así te verá el grupo).'); return; }
+  try{
+    const d=await api('/api/trips/join',{method:'POST', auth:false, body:{code:code, nickname:nick, deviceId:deviceId()}});
+    setSessionFromResponse(d, nick);
+    await refreshState(true); heartbeat();
+    toast('Dentro: '+d.trip.name+'. Ya ves la ruta del grupo.');
+    showTab('ruta');
+  }catch(e){ toast(e.status===404?'Ese código no existe. Revísalo con quien te lo pasó.':'Error al unirse: '+e.message); }
+};
+document.getElementById('btnLeave').onclick=()=>{ if(confirm('¿Salir de este viaje en este móvil? El viaje seguirá en el servidor para el grupo.')){ session=null; saveSession(); serverState=null; redraw(); showTab('start'); toast('Has salido del viaje en este móvil.'); } };
 
-/* STOPS */
+/* STOPS (solo organizador en servidor) */
 document.getElementById('btnStop').onclick=()=>{
-  const t=trip(); if(!t){ toast('Crea primero un viaje.'); showTab('start'); return; }
+  if(!session){ toast('Crea primero un viaje o únete con el código.'); showTab('start'); return; }
+  if(!isOrganizer()){ toast('Solo el organizador puede añadir paradas.'); return; }
   const name=document.getElementById('sName').value.trim(); if(!name){ toast('Pon nombre a la parada.'); return; }
   const c=map.getCenter();
-  t.stops.push({id:uid(),name,cat:document.getElementById('sCat').value,time:document.getElementById('sTime').value||'11:00',dur:Number(document.getElementById('sDur').value||60),do:document.getElementById('sDo').value.trim(),done:false,lat:+c.lat.toFixed(6),lng:+c.lng.toFixed(6)});
-  save(); redraw(); document.getElementById('stopFormWrap').style.display='none'; document.getElementById('btnToggleStopForm').textContent='+ Añadir parada'; toast('Parada añadida. Ya se ve en «Ahora toca».');
+  apiAction(api('/api/trips/'+session.tripId+'/stops',{method:'POST', body:{name:name, cat:document.getElementById('sCat').value, time:document.getElementById('sTime').value||'11:00', dur:Number(document.getElementById('sDur').value||60), do:document.getElementById('sDo').value.trim(), lat:+c.lat.toFixed(6), lng:+c.lng.toFixed(6)}}),'Parada añadida para todo el grupo.');
+  document.getElementById('sName').value=''; document.getElementById('stopFormWrap').style.display='none'; document.getElementById('btnToggleStopForm').textContent='+ Añadir parada';
 };
 
-/* SHARE ROUTE (?ruta= base64 JSON) */
-function encodeRoute(stops){ return btoa(unescape(encodeURIComponent(JSON.stringify(stops.map(s=>({name:s.name,cat:s.cat,time:s.time,dur:s.dur,do:s.do,lat:s.lat,lng:s.lng})))))); }
-function decodeRoute(b){ return JSON.parse(decodeURIComponent(escape(atob(b)))); }
-document.getElementById('btnShare').onclick=()=>{
-  const t=trip(); if(!t||!t.stops.length){ toast('Añade al menos una parada para compartir.'); return; }
-  const url=location.origin+location.pathname+'?ruta='+encodeURIComponent(encodeRoute(t.stops))+'&viaje='+encodeURIComponent(t.name);
-  document.getElementById('shareLink').value=url;
-  const wa='https://wa.me/?text='+encodeURIComponent("👁️ Ruta God's Eye: "+t.name+"\n"+t.stops.map(s=>'• '+s.time+' '+s.name).join('\n')+"\n\nÁbrela aquí: "+url);
+/* COMPARTIR INVITACION (?join=CODIGO) */
+function shareInvite(){
+  if(!session){ toast('Primero entra en un viaje.'); return; }
+  const url=inviteLink();
+  const sl=document.getElementById('shareLink'); if(sl) sl.value=url;
+  const t=serverState && serverState.trip;
+  const txt="👁️ God's Eye Viajes: "+(t?t.name:'nuestro viaje')+"\nCódigo: "+session.inviteCode+"\nEntra aquí y pon tu apodo: "+url;
   if(navigator.clipboard) navigator.clipboard.writeText(url).catch(()=>{});
-  window.open(wa,'_blank'); toast('Enlace generado y copiado. WhatsApp abierto para enviarlo.');
-};
-(function importRoute(){
-  const q=new URLSearchParams(location.search); const r=q.get('ruta'); if(!r) return;
-  try{
-    const stops=decodeRoute(r); const name=q.get('viaje')||'Viaje compartido';
-    const nt={id:uid(),code:uid(),name,from:'',to:'',stops:stops.map(s=>({...s,id:uid(),done:false})),places:[],track:[]};
-    S.trips.push(nt); S.activeId=nt.id; save();
-    const b=document.getElementById('importBanner'); b.style.display='block'; b.innerHTML='<b>Ruta importada:</b> '+esc(name)+' con '+stops.length+' paradas. Ya la tienes en la pestaña «Ruta».';
-    history.replaceState({},'',location.pathname);
-  }catch(e){ toast('No se pudo importar la ruta del enlace.'); }
+  window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank');
+  toast('Invitación generada y copiada. WhatsApp abierto.');
+}
+document.getElementById('btnShare').onclick=shareInvite;
+// ?join=CODIGO: pre-rellena Unirme. ?ruta= antiguo ya no se usa (la ruta vive en el servidor).
+(function bootParams(){
+  const q=new URLSearchParams(location.search); const j=q.get('join');
+  if(j){ document.getElementById('jCode').value=j.toUpperCase(); const b=document.getElementById('importBanner'); b.style.display='block'; b.innerHTML='<b>Te han invitado a un viaje.</b> Pon tu apodo abajo en «Unirme a un viaje» — el código <span class="kbd">'+esc(j.toUpperCase())+'</span> ya está rellenado.'; }
+  if(q.get('ruta')){ const b=document.getElementById('importBanner'); b.style.display='block'; b.innerHTML='<b>Este enlace es de la versión anterior.</b> Ahora la ruta vive en el servidor: pide al organizador el <b>código de 6 letras</b> y entra en «Unirme a un viaje».'; }
+  if(q.get('join')||q.get('ruta')) history.replaceState({},'',location.pathname);
 })();
 
-/* PLACES / PHOTOS */
+/* PLACES / PHOTOS (2A: aun locales en este movil; la estructura ya viene del servidor si hay places) */
 document.getElementById('pPhoto').addEventListener('change',e=>{
   const f=e.target.files[0]; if(!f) return;
   const img=new Image();
@@ -367,12 +496,14 @@ document.getElementById('pPhoto').addEventListener('change',e=>{
   img.src=URL.createObjectURL(f);
 });
 document.getElementById('btnPlace').onclick=()=>{
-  const t=trip(); if(!t){ toast('Crea primero un viaje.'); showTab('start'); return; }
+  if(!session){ toast('Crea primero un viaje o únete con el código.'); showTab('start'); return; }
   const title=document.getElementById('pTitle').value.trim(); if(!title){ toast('Pon un título al lugar.'); return; }
   const c=map.getCenter();
-  t.places.push({id:uid(),title,cat:document.getElementById('pCat').value,note:document.getElementById('pNote').value.trim(),info:document.getElementById('pInfo').value.trim(),photo:photoData,lat:+c.lat.toFixed(6),lng:+c.lng.toFixed(6)});
+  if(!localData.places) localData.places={};
+  if(!localData.places[session.tripId]) localData.places[session.tripId]=[];
+  localData.places[session.tripId].push({id:'loc-'+Date.now().toString(36),title:title,cat:document.getElementById('pCat').value,note:document.getElementById('pNote').value.trim(),info:document.getElementById('pInfo').value.trim(),photo:photoData,lat:+c.lat.toFixed(6),lng:+c.lng.toFixed(6)});
   photoData=''; document.getElementById('pPreview').style.display='none'; document.getElementById('pPhoto').value='';
-  save(); redraw(); document.getElementById('placeFormWrap').style.display='none'; document.getElementById('btnTogglePlaceForm').textContent='+ Añadir lugar con foto'; toast('Lugar añadido. Míralo en la lista y en el mapa.');
+  saveLocal(); redraw(); document.getElementById('placeFormWrap').style.display='none'; document.getElementById('btnTogglePlaceForm').textContent='+ Añadir lugar con foto'; toast('Lugar añadido en este móvil. En la 2B se compartirá con el grupo.');
 };
 
 /* GPS */
@@ -385,13 +516,16 @@ function setGps(txt,isRec){
   b.className=isRec?'warn':'';
 }
 function pushPoint(lat,lng){
-  const t=trip(); if(!t) return;
-  const p=[+lat.toFixed(6),+lng.toFixed(6)]; const last=t.track[t.track.length-1];
+  if(!session) return;
+  const p=[+lat.toFixed(6),+lng.toFixed(6)]; lastPos=p;
+  if(!localData.tracks) localData.tracks={};
+  if(!localData.tracks[session.tripId]) localData.tracks[session.tripId]=[];
+  const tr=localData.tracks[session.tripId]; const last=tr[tr.length-1];
   if(last && hav(last,p)<0.008) return;
-  t.track.push(p); save(); drawTrackGroup(line, t.track, {color:'#e8c877',weight:5,opacity:.95}); map.panTo(p); renderStats(); renderReplayCheck();
+  tr.push(p); saveLocal(); drawTrackGroup(line, tr, {color:'#e8c877',weight:5,opacity:.95}); map.panTo(p); renderStats(); renderReplayCheck();
 }
 function startRec(){
-  const t=trip(); if(!t){ toast('Crea primero un viaje.'); showTab('start'); return; }
+  if(!session){ toast('Crea primero un viaje o únete con el código.'); showTab('start'); return; }
   if(!navigator.geolocation){ toast('Este navegador no da GPS. Usa Simular paseo.'); return; }
   setGps('buscando GPS…',true);
   watchId=navigator.geolocation.watchPosition(
@@ -401,10 +535,10 @@ function startRec(){
 }
 function stopRec(){ if(watchId!==null) navigator.geolocation.clearWatch(watchId); watchId=null; if(simTimer){clearInterval(simTimer); simTimer=null;} setGps('parado',false); }
 document.getElementById('btnRecToggle').onclick=()=>{ if(recording){ stopRec(); toast('Grabación parada. Ve a Replay cuando quieras.'); } else { startRec(); } };
-document.getElementById('btnCenter').onclick=()=>{ if(navigator.geolocation) navigator.geolocation.getCurrentPosition(p=>map.setView([p.coords.latitude,p.coords.longitude],15),()=>toast('No se pudo centrar.')); };
+document.getElementById('btnCenter').onclick=()=>{ if(navigator.geolocation) navigator.geolocation.getCurrentPosition(p=>{ lastPos=[p.coords.latitude,p.coords.longitude]; map.setView(lastPos,15); },()=>toast('No se pudo centrar.')); };
 document.getElementById('btnSim').onclick=()=>{
-  const t=trip(); if(!t){ toast('Crea primero un viaje.'); showTab('start'); return; } stopRec(); setGps('simulando paseo…',true);
-  const c=map.getCenter(); const startPt=(t.track && t.track.length)? t.track[t.track.length-1] : [c.lat,c.lng]; let lat=startPt[0],lng=startPt[1],ang=Math.random()*Math.PI*2,i=0;
+  if(!session){ toast('Crea primero un viaje o únete con el código.'); showTab('start'); return; } stopRec(); setGps('simulando paseo…',true);
+  const tr=localTrack(); const c=map.getCenter(); const startPt=tr.length? tr[tr.length-1] : [c.lat,c.lng]; let lat=startPt[0],lng=startPt[1],ang=Math.random()*Math.PI*2,i=0;
   simTimer=setInterval(()=>{ i++; ang+=(Math.random()-.5)*.7; const step=.0016; lat+=Math.cos(ang)*step; lng+=Math.sin(ang)*step*1.35; pushPoint(lat,lng); if(i>=42){ stopRec(); toast('Paseo simulado terminado. Ahora sí: ve a la pestaña Replay.'); } },180);
 };
 
@@ -429,7 +563,7 @@ document.getElementById('btnStopReplay').onclick=()=>{
 function finishReplay(t){
   cleanupReplay();
   const card=document.getElementById('replayCard'); card.style.display='block';
-  card.innerHTML='<b>👁️ '+esc(t.name)+' — Replay completado</b><br><span class="mini">Distancia revelada</span> <b>'+trackKm(t.track).toFixed(2)+' km</b> · <span class="mini">Paradas</span> <b>'+t.stops.length+'</b> ('+t.stops.filter(s=>s.done).length+' hechas) · <span class="mini">Lugares</span> <b>'+t.places.length+'</b><br>'+t.places.map(p=>CATS[p.cat].e+' '+esc(p.title)).join(' · ')+'<br><span class="mini">Haz una captura de esta tarjeta para compartirla, y la ruta con el botón «Compartir ruta» de la pestaña Ruta.</span>';
+  card.innerHTML='<b>👁️ '+esc(t.name)+' — Replay completado</b><br><span class="mini">Distancia revelada</span> <b>'+trackKm(t.track).toFixed(2)+' km</b> · <span class="mini">Paradas</span> <b>'+t.stops.length+'</b> ('+t.stops.filter(s=>s.done).length+' hechas) · <span class="mini">Lugares</span> <b>'+t.places.length+'</b><br>'+t.places.map(p=>(CATS[p.cat]||CATS.peculiar).e+' '+esc(p.title)).join(' · ')+'<br><span class="mini">Haz una captura de esta tarjeta para compartirla.</span>';
   showTab('replay');
   toast('Replay terminado. Aquí tienes tu tarjeta del viaje.');
 }
@@ -475,15 +609,23 @@ function startReplay(){
 }
 document.getElementById('btnReplay').onclick=()=>{
   const t=trip();
-  if(!t){ showTab('start'); toast('Primero crea tu viaje aquí.'); return; }
-  if(t.track.length<2){ showTab('mapa'); toast('Te falta el recorrido: graba o simula un paseo aquí y vuelve a Replay.'); return; }
+  if(!session){ showTab('start'); toast('Primero crea tu viaje o únete con el código.'); return; }
+  if(!t || t.track.length<2){ showTab('mapa'); toast('Te falta el recorrido: graba o simula un paseo aquí y vuelve a Replay.'); return; }
   startReplay();
 };
 
-/* PWA */
+/* ARRANQUE + SONDEO */
 if('serviceWorker' in navigator && (location.protocol==='https:'||location.hostname==='localhost')){ navigator.serviceWorker.register('sw.js').catch(()=>{}); }
 redraw();
-showTab(trip()?'mapa':'start');
+showTab(session?'ruta':'start');
+(async()=>{
+  const ok=await checkHealth();
+  if(!ok){ document.getElementById('serverError').style.display='block'; return; }
+  if(session){ await refreshState(true); heartbeat(); showTab('ruta'); }
+})();
+setInterval(()=>{ if(session && !(typeof replayTimer!=='undefined' && replayTimer)) refreshState(true); },15000);
+setInterval(heartbeat,30000);
 </script>
+
 </body>
 </html>
