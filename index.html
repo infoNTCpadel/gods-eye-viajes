@@ -371,7 +371,10 @@ function renderPot(){
   const box=document.getElementById('potBox'); if(!box) return;
   const wrap=document.getElementById('potContribWrap');
   if(wrap && wrap.style.display!=='none') return; // no pisar mientras se escribe el importe
+  const wrapFor=document.getElementById('potForWrap');
+  if(wrapFor && wrapFor.style.display!=='none') return; // tampoco mientras la tesorera apunta
   const pot=(serverState && serverState.pot)||{};
+  const you=(serverState && serverState.you)||{};
   const mem=members();
   if(!pot.treasurer){
     box.innerHTML='<div class="card"><b>🫙 Bote común</b><div class="mini">¿Hacéis fondo común? Elegid quién lo lleva.</div><div class="catchips" style="margin-top:8px">'+mem.map(m=>'<button type="button" data-n="'+esc(m.nickname)+'">'+esc(m.nickname)+'</button>').join('')+'</div></div>';
@@ -385,6 +388,10 @@ function renderPot(){
     +((pot.pendingCents||0)>0?'<div class="mini" style="color:#d9a441">＋'+esc(fmtEuro(pot.pendingCents))+' pendientes de confirmar</div>':'')
     +(((pot.pendingList)||[]).some(p=>session&&p.nickname===session.nickname)?'<div class="mini">⏳ Tu aportación está pendiente de que '+esc(pot.treasurer)+' la confirme.</div>':'')
     +'<div class="row"><button id="btnPotContrib">Aportar al bote</button></div>'
+    +(you.isTreasurer?'<div class="row" style="margin-top:6px"><button id="btnPotForOther" class="sec">＋ Aportación de un compañero</button></div>'
+      +'<div id="potForWrap" style="display:none;margin-top:8px"><div class="mini">La apuntas tú: queda confirmada al momento.</div><div class="catchips" id="potForChips" style="margin:6px 0">'
+      +mem.map(m=>'<button type="button" data-n="'+esc(m.nickname)+'">'+esc(m.nickname)+'</button>').join('')
+      +'</div><label>Importe<input id="potForAmount" class="amount" inputmode="decimal" placeholder="0,00"></label><div class="row"><button id="btnPotForGo">Apuntar aportación</button></div></div>':'')
     +'<div id="potContribWrap" style="display:none;margin-top:8px"><div class="mini">Aportas como <b>'+esc(session?session.nickname:'')+'</b>. El bote lo confirma '+esc(pot.treasurer)+'.</div><label>Importe<input id="potAmount" class="amount" inputmode="decimal" placeholder="0,00"></label><div class="row"><button id="btnPotGo">Aportar</button></div></div>'
     +renderPendingList()+'</div>';
   document.getElementById('btnPotContrib').onclick=()=>{
@@ -399,6 +406,26 @@ function renderPot(){
       await refreshState(true); toast('Aportación enviada 🫙 El bote la confirma.');
     }catch(e){ toast('Error: '+e.message); }
   };
+  /* La tesorera apunta la aportación de un compañero sin móvil: ya confirmada */
+  var potForNick=null;
+  const btnFor=document.getElementById('btnPotForOther');
+  if(btnFor){
+    btnFor.onclick=()=>{ const w=document.getElementById('potForWrap'); w.style.display=(w.style.display==='none')?'block':'none'; };
+    document.querySelectorAll('#potForChips button').forEach(b=>b.onclick=()=>{
+      document.querySelectorAll('#potForChips button').forEach(x=>x.classList.remove('on'));
+      b.classList.add('on'); potForNick=b.dataset.n;
+    });
+    document.getElementById('btnPotForGo').onclick=async()=>{
+      const amount=parseAmt(document.getElementById('potForAmount').value);
+      if(!potForNick){ toast('Elige al compañero.'); return; }
+      if(amount<=0){ toast('Pon el importe.'); return; }
+      try{
+        await api('/api/trips/'+session.tripId+'/pot/contribute',{method:'POST',body:{amount:amount,nickname:potForNick}});
+        document.getElementById('potForAmount').value=''; document.getElementById('potForWrap').style.display='none';
+        await refreshState(true); toast('Aportación de '+potForNick+' apuntada ✔');
+      }catch(e){ toast('Error: '+e.message); }
+    };
+  }
 }
 /* Aportaciones pendientes: solo el tesorero confirma/rechaza */
 function renderPendingList(){

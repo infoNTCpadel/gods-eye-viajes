@@ -722,15 +722,20 @@ class H(BaseHTTPRequestHandler):
             nicks = self.member_nicks(c, trip_id)
             if nick not in nicks:
                 return self.err(400, "quien aporta tiene que ser del viaje")
-            _tmid, treasurer_nick = get_treasurer(c, trip_id)
+            tmid, treasurer_nick = get_treasurer(c, trip_id)
             if not treasurer_nick:
                 return self.err(400, "designa primero quién lleva el bote")
+            is_treasurer = (m["id"] == tmid)
+            if nick != m["nickname"] and not is_treasurer:
+                return self.err(403, "solo quien lleva el bote puede apuntar aportaciones de otro")
+            # La tesorera da fe del dinero en mano: nace confirmada. Los demás, pendiente.
+            status = "confirmed" if is_treasurer else "pending"
             eid = uuid.uuid4().hex
             c.execute(
                 "INSERT INTO expenses(id,trip_id,member_id,payer_nickname,description,amount_cents,currency,split_mode,participants_json,kind,status,from_pot,photo_path,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (eid, trip_id, m["id"], nick, "Aportación al bote de " + nick, total, "EUR", "equal",
                  json.dumps([{"nickname": treasurer_nick, "cents": total}], ensure_ascii=False),
-                 "contribution", "pending", 0, "", now_iso()),
+                 "contribution", status, 0, "", now_iso()),
             )
             r = c.execute("SELECT * FROM expenses WHERE id=?", (eid,)).fetchone()
         self.send_json(201, {"ok": True, "expense": expense_public(r)})
