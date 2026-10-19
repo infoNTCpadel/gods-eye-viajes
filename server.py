@@ -33,6 +33,7 @@ STATIC = {
     "/icon-192.png": ("icon-192.png", "image/png"),
     "/icon-512.png": ("icon-512.png", "image/png"),
     "/favicon.ico": ("icon.svg", "image/svg+xml"),
+    "/admin19": ("admin.html", "text/html; charset=utf-8"),
 }
 
 
@@ -67,7 +68,8 @@ def init_db():
             """
             CREATE TABLE IF NOT EXISTS trips(
               id TEXT PRIMARY KEY, name TEXT NOT NULL, from_date TEXT DEFAULT '',
-              to_date TEXT DEFAULT '', invite_code TEXT UNIQUE NOT NULL, created_at TEXT NOT NULL);
+              to_date TEXT DEFAULT '', invite_code TEXT UNIQUE NOT NULL, created_at TEXT NOT NULL,
+              destination TEXT DEFAULT '', itinerary_updated_at TEXT DEFAULT '');
             CREATE TABLE IF NOT EXISTS members(
               id TEXT PRIMARY KEY, trip_id TEXT NOT NULL REFERENCES trips(id),
               nickname TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'member',
@@ -86,6 +88,10 @@ def init_db():
               member_id TEXT DEFAULT '', from_nickname TEXT NOT NULL,
               to_nickname TEXT NOT NULL, amount_cents INTEGER NOT NULL,
               created_at TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS itinerary_items(
+              id TEXT PRIMARY KEY, trip_id TEXT NOT NULL REFERENCES trips(id),
+              day TEXT DEFAULT '', time TEXT DEFAULT '', title TEXT NOT NULL,
+              note TEXT DEFAULT '', sort INTEGER DEFAULT 0, created_at TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS pot_requests(
               id TEXT PRIMARY KEY, trip_id TEXT NOT NULL REFERENCES trips(id),
               created_by TEXT DEFAULT '', amount_cents INTEGER NOT NULL,
@@ -104,6 +110,9 @@ def init_db():
             if col not in ecols:
                 c.execute("ALTER TABLE expenses ADD COLUMN %s %s" % (col, typ))
         tcols = {r["name"] for r in c.execute("PRAGMA table_info(trips)")}
+        for _col, _typ in (("destination", "TEXT DEFAULT ''"), ("itinerary_updated_at", "TEXT DEFAULT ''")):
+            if _col not in tcols:
+                c.execute("ALTER TABLE trips ADD COLUMN %s %s" % (_col, _typ))
         if "treasurer_member_id" not in tcols:
             c.execute("ALTER TABLE trips ADD COLUMN treasurer_member_id TEXT DEFAULT ''")
         scols = {r["name"] for r in c.execute("PRAGMA table_info(settlements)")}
@@ -162,7 +171,9 @@ def money(cents):
 
 
 def trip_public(r):
-    return {"id": r["id"], "name": r["name"], "inviteCode": r["invite_code"], "from": r["from_date"] or "", "to": r["to_date"] or ""}
+    keys = r.keys() if hasattr(r, "keys") else []
+    return {"id": r["id"], "name": r["name"], "inviteCode": r["invite_code"], "from": r["from_date"] or "", "to": r["to_date"] or "",
+            "destination": (r["destination"] if "destination" in keys and r["destination"] else "") or ""}
 
 
 def member_sharing(r):
@@ -192,14 +203,23 @@ def place_public(r):
     photo_path = r["photo_path"] if "photo_path" in keys else ""
     photo_url = "/api/photos/%s/%s" % (r["trip_id"], photo_path) if photo_path else ""
     author = r["author_nickname"] if "author_nickname" in keys and r["author_nickname"] else (r["created_by"] if "created_by" in keys and r["created_by"] else "")
+    tags = (r["tags"] if "tags" in keys and r["tags"] else "") or ""
+    tag_list = [t.strip() for t in tags.split(",") if t.strip()]
     return {
         "id": r["id"], "title": r["title"], "cat": r["cat"], "note": r["note"] or "",
+        "tags": tags, "tagList": tag_list,
         "info": r["info"] or "", "photoUrl": photo_url, "photoPath": photo_path or "",
         "lat": r["lat"], "lng": r["lng"],
         "stopId": (r["stop_id"] if "stop_id" in keys else "") or "",
         "author": author or "", "memberId": (r["member_id"] if "member_id" in keys else "") or "",
         "createdAt": r["created_at"],
     }
+
+
+def itinerary_public(r):
+    return {"id": r["id"], "day": r["day"] or "", "time": r["time"] or "",
+            "title": r["title"] or "", "note": r["note"] or "",
+            "createdAt": r["created_at"]}
 
 
 def expense_public(r):
@@ -279,6 +299,11 @@ def trip_state(c, trip_row, member_row=None):
     except Exception:
         pass
     expenses = [expense_public(r) for r in c.execute("SELECT * FROM expenses WHERE trip_id=? ORDER BY created_at", (trip_row["id"],))]
+    itin_keys = trip_row.keys() if hasattr(trip_row, "keys") else []
+    itin_rows = c.execute("SELECT * FROM itinerary_items WHERE trip_id=? ORDER BY day, time, sort, created_at",
+                          (trip_row["id"],)).fetchall()
+    itinerary = {"updatedAt": (trip_row["itinerary_updated_at"] if "itinerary_updated_at" in itin_keys else "") or "",
+                 "items": [itinerary_public(r) for r in itin_rows]}
     settlements = [settlement_public(r) for r in c.execute("SELECT * FROM settlements WHERE trip_id=? ORDER BY created_at", (trip_row["id"],))]
     nicknames = [m["nickname"] for m in members]
     paid, owed, nets = compute_balances(expenses, settlements, nicknames)
@@ -296,6 +321,7 @@ def trip_state(c, trip_row, member_row=None):
         "settlements": settlements,
         "balances": balances,
         "whoPaysWhom": who_pays_whom(nets),
+        "itinerary": itinerary,
         "you": you,
     }
 
@@ -383,6 +409,8 @@ class H(BaseHTTPRequestHandler):
             return self.serve_photo(p)
         if p.startswith("/api/trips/by-code/"):
             return self.get_by_code(unquote(p.rsplit("/", 1)[-1]).upper())
+        if p == "/api/admin/trips":
+            return self.admin_trips()
         parts = [x for x in p.split("/") if x]
         if len(parts) == 4 and parts[0] == "api" and parts[1] == "trips" and parts[3] == "balances":
             return self.get_balances(parts[2])
@@ -400,6 +428,12 @@ class H(BaseHTTPRequestHandler):
             parts = [x for x in p.split("/") if x]
             if len(parts) == 4 and parts[0] == "api" and parts[1] == "trips" and parts[3] == "places":
                 return self.create_place(parts[2])
+            if len(parts) == 4 and parts[0] == "api" and parts[1] == "trips" and parts[3] == "itinerary":
+                return self.itinerary_create(parts[2])
+            if len(parts) == 5 and parts[0] == "api" and parts[1] == "trips" and parts[3] == "itinerary":
+                return self.itinerary_update(parts[2], parts[4])
+            if len(parts) == 4 and parts[0] == "api" and parts[1] == "places" and parts[3] == "tags":
+                return self.update_place_tags(parts[2])
             if len(parts) == 4 and parts[0] == "api" and parts[1] == "trips" and parts[3] == "heartbeat":
                 return self.heartbeat(parts[2])
             if len(parts) == 4 and parts[0] == "api" and parts[1] == "trips" and parts[3] == "expenses":
@@ -418,6 +452,8 @@ class H(BaseHTTPRequestHandler):
                 return self.delete_place(parts[2])
             if len(parts) == 3 and parts[0] == "api" and parts[1] == "expenses":
                 return self.delete_expense(parts[2])
+            if len(parts) == 3 and parts[0] == "api" and parts[1] == "itinerary":
+                return self.itinerary_delete(parts[2])
             return self.err(404, "no encontrado")
         except ValueError as e:
             return self.err(400, str(e))
@@ -433,8 +469,9 @@ class H(BaseHTTPRequestHandler):
         with LOCK, db() as c:
             code = new_code(c)
             c.execute(
-                "INSERT INTO trips(id,name,from_date,to_date,invite_code,created_at) VALUES(?,?,?,?,?,?)",
-                (tid, name, clean_str(b.get("from"), 20, "from"), clean_str(b.get("to"), 20, "to"), code, now_iso()),
+                "INSERT INTO trips(id,name,from_date,to_date,invite_code,destination,created_at) VALUES(?,?,?,?,?,?,?)",
+                (tid, name, clean_str(b.get("from"), 20, "from"), clean_str(b.get("to"), 20, "to"), code,
+                 clean_str(b.get("destination"), 80, "destination"), now_iso()),
             )
             c.execute(
                 "INSERT INTO members(id,trip_id,nickname,role,token,device_id,last_seen,created_at) VALUES(?,?,?,?,?,?,?,?)",
@@ -523,10 +560,14 @@ class H(BaseHTTPRequestHandler):
                 lat REAL, lng REAL, stop_id TEXT DEFAULT '',
                 created_by TEXT DEFAULT '', created_at TEXT NOT NULL)"""
             )
+            pcols = {r["name"] for r in c.execute("PRAGMA table_info(places)")}
+            if "tags" not in pcols:
+                c.execute("ALTER TABLE places ADD COLUMN tags TEXT DEFAULT ''")
             c.execute(
-                "INSERT INTO places(id,trip_id,member_id,author_nickname,title,cat,note,info,photo,photo_path,lat,lng,stop_id,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO places(id,trip_id,member_id,author_nickname,title,cat,note,tags,info,photo,photo_path,lat,lng,stop_id,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (pid, trip_id, m["id"], m["nickname"], title, "peculiar",
-                 clean_str(b.get("note"), 500, "note"), "", "", photo_path,
+                 clean_str(b.get("note"), 500, "note"), clean_str(b.get("tags"), 200, "tags"),
+                 "", "", photo_path,
                  b.get("lat"), b.get("lng"), "", m["nickname"], now_iso()),
             )
             r = c.execute("SELECT * FROM places WHERE id=?", (pid,)).fetchone()
@@ -555,6 +596,108 @@ class H(BaseHTTPRequestHandler):
                 os.remove(os.path.join(PHOTOS_DIR, p0["trip_id"], os.path.basename(photo_path)))
             except OSError:
                 pass
+        self.send_json(200, {"ok": True})
+
+    # ---------- ADMIN (ruta semi-privada /admin19) ----------
+    def admin_trips(self):
+        with LOCK, db() as c:
+            rows = c.execute(
+                "SELECT t.*, (SELECT COUNT(*) FROM members m WHERE m.trip_id=t.id) AS n FROM trips t ORDER BY created_at DESC").fetchall()
+        out = []
+        for r in rows:
+            d = trip_public(r)
+            d["members"] = r["n"]
+            d["createdAt"] = r["created_at"]
+            out.append(d)
+        self.send_json(200, {"ok": True, "trips": out})
+
+    # ---------- ETIQUETAS DE FOTOS ----------
+    def update_place_tags(self, place_id):
+        with LOCK, db() as c:
+            try:
+                p0 = c.execute("SELECT * FROM places WHERE id=?", (place_id,)).fetchone()
+            except Exception:
+                return self.err(404, "foto no existe")
+        if not p0:
+            return self.err(404, "foto no existe")
+        a = self.auth(p0["trip_id"])
+        if not a:
+            return
+        m, _t = a
+        is_author = ("member_id" in p0.keys() and p0["member_id"] == m["id"])
+        if not is_author and m["role"] != "organizer":
+            return self.err(403, "solo el autor o el organizador puede etiquetar esta foto")
+        b = self.read_json()
+        tags = clean_str(b.get("tags"), 200, "tags")
+        with LOCK, db() as c:
+            c.execute("UPDATE places SET tags=? WHERE id=?", (tags, place_id))
+            r = c.execute("SELECT * FROM places WHERE id=?", (place_id,)).fetchone()
+        self.send_json(200, {"ok": True, "place": place_public(r)})
+
+    # ---------- ITINERARIO (solo el creador/organizador edita) ----------
+    def _bump_itinerary(self, c, trip_id):
+        c.execute("UPDATE trips SET itinerary_updated_at=? WHERE id=?", (now_iso(), trip_id))
+
+    def itinerary_create(self, trip_id):
+        a = self.auth(trip_id)
+        if not a:
+            return
+        m, _t = a
+        if m["role"] != "organizer":
+            return self.err(403, "solo quien creó el viaje puede cambiar el itinerario")
+        b = self.read_json()
+        title = clean_str(b.get("title"), 90, "title")
+        if not title:
+            return self.err(400, "título obligatorio")
+        with LOCK, db() as c:
+            iid = uuid.uuid4().hex
+            mx = c.execute("SELECT COALESCE(MAX(sort),0) FROM itinerary_items WHERE trip_id=?", (trip_id,)).fetchone()[0]
+            c.execute(
+                "INSERT INTO itinerary_items(id,trip_id,day,time,title,note,sort,created_at) VALUES(?,?,?,?,?,?,?,?)",
+                (iid, trip_id, clean_str(b.get("day"), 40, "day"),
+                 clean_str(b.get("time"), 5, "time"), title,
+                 clean_str(b.get("note"), 300, "note"), (mx or 0) + 1, now_iso()))
+            self._bump_itinerary(c, trip_id)
+            r = c.execute("SELECT * FROM itinerary_items WHERE id=?", (iid,)).fetchone()
+        self.send_json(201, {"ok": True, "item": itinerary_public(r)})
+
+    def itinerary_update(self, trip_id, item_id):
+        a = self.auth(trip_id)
+        if not a:
+            return
+        m, _t = a
+        if m["role"] != "organizer":
+            return self.err(403, "solo quien creó el viaje puede cambiar el itinerario")
+        b = self.read_json()
+        with LOCK, db() as c:
+            r0 = c.execute("SELECT * FROM itinerary_items WHERE id=? AND trip_id=?", (item_id, trip_id)).fetchone()
+            if not r0:
+                return self.err(404, "punto no existe")
+            c.execute("UPDATE itinerary_items SET day=?, time=?, title=?, note=? WHERE id=?",
+                      (clean_str(b.get("day"), 40, "day") or r0["day"],
+                       clean_str(b.get("time"), 5, "time") or r0["time"],
+                       clean_str(b.get("title"), 90, "title") or r0["title"],
+                       clean_str(b.get("note"), 300, "note") if b.get("note") is not None else r0["note"],
+                       item_id))
+            self._bump_itinerary(c, trip_id)
+            r = c.execute("SELECT * FROM itinerary_items WHERE id=?", (item_id,)).fetchone()
+        self.send_json(200, {"ok": True, "item": itinerary_public(r)})
+
+    def itinerary_delete(self, item_id):
+        with LOCK, db() as c:
+            r0 = c.execute("SELECT * FROM itinerary_items WHERE id=?", (item_id,)).fetchone()
+            if not r0:
+                return self.err(404, "punto no existe")
+            trip_id = r0["trip_id"]
+        a = self.auth(trip_id)
+        if not a:
+            return
+        m, _t = a
+        if m["role"] != "organizer":
+            return self.err(403, "solo quien creó el viaje puede cambiar el itinerario")
+        with LOCK, db() as c:
+            c.execute("DELETE FROM itinerary_items WHERE id=?", (item_id,))
+            self._bump_itinerary(c, trip_id)
         self.send_json(200, {"ok": True})
 
     # ---------- GASTOS ----------

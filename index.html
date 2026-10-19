@@ -89,6 +89,7 @@ a{color:#e8c877}
 .settle b{overflow-wrap:anywhere}
 .empty{display:flex;flex-direction:column;align-items:center;gap:8px;padding:28px 16px;text-align:center;color:#b8a888}
 .empty .big{font-size:40px}
+.tag{display:inline-block;background:#3a2c18;color:#e8c877;border-radius:20px;padding:4px 12px;margin:3px 4px 0 0;font-size:13px;font-weight:700}
 </style>
 </head>
 <body>
@@ -97,7 +98,7 @@ a{color:#e8c877}
   <div class="brand">📖 Diario de viaje</div>
   <div id="hdrTrip" class="tripname" style="display:none"></div>
   <div id="hdrMembers" class="nowline" style="display:none"></div>
-  <div class="topbtns" id="hdrChangeRow" style="display:none"><button id="btnShareTrip" class="sec">Compartir viaje</button><button id="btnChangeTrip" class="sec">Cambiar viaje</button></div>
+  <div class="topbtns" id="hdrChangeRow" style="display:none"><button id="btnShareTrip" class="sec">Compartir viaje</button></div>
 </div>
 <div class="wrap">
 
@@ -109,15 +110,8 @@ a{color:#e8c877}
     <div id="sharePanel" class="card" style="display:none;border-color:#d9a441"></div>
     <div id="importBanner" class="card" style="display:none;border-color:#d9a441"></div>
     <div class="card">
-      <h2 style="margin-top:0">Crear viaje</h2>
-      <label>Nombre del viaje<input id="tName" placeholder="Rioja con amigos"></label>
-      <label>Tu apodo<input id="tNick" placeholder="Mateo"></label>
-      <div class="row">
-        <button id="btnCreate">Crear viaje</button>
-      </div>
-    </div>
-    <div class="card">
       <h2 style="margin-top:0">Unirme con código</h2>
+      <div class="mini" style="margin-bottom:8px">Pide el código o el enlace de invitación a quien creó el viaje.</div>
       <label>Código<input id="jCode" placeholder="K7PX3M" style="text-transform:uppercase" maxlength="6"></label>
       <label>Tu apodo<input id="jNick" placeholder="Ana"></label>
       <div class="row">
@@ -132,6 +126,7 @@ a{color:#e8c877}
   <!-- DIARIO -->
   <section id="tab-diario" class="tab">
     <h2>Diario</h2>
+    <input id="diarySearch" placeholder="🔍 Buscar por título, nota o etiqueta…" style="width:100%;margin:0 0 10px;padding:12px;border-radius:10px;border:1px solid #3a2c18;background:#241b0f;color:#e8ddc4;font-size:15px">
     <div id="days"></div>
     <div class="row"><button id="btnTogglePhotoForm">📸 Añadir foto</button></div>
     <div id="photoFormWrap" class="card" style="display:none">
@@ -140,6 +135,7 @@ a{color:#e8c877}
       <p class="mini" id="photoWarn"></p>
       <label>Título<input id="pTitle" placeholder="Plaza del pueblo"></label>
       <label>Nota (opcional)<input id="pNote" placeholder="Vistas increíbles"></label>
+      <label>Etiquetas (opcional, separadas por comas)<input id="pTags" placeholder="playa, atardecer"></label>
       <div class="row"><button id="btnPlace">Guardar en el viaje</button></div>
     </div>
   </section>
@@ -206,13 +202,32 @@ a{color:#e8c877}
 </div>
 <button id="btnFabCam" class="fab" title="Añadir foto">📸</button>
 
+  <!-- ITINERARIO -->
+  <section id="tab-itin" class="tab">
+    <h2>Itinerario</h2>
+    <div id="itinContext"></div>
+    <div id="itinBanner" class="card" style="display:none;border-color:#d9a441"><b>🆕 El itinerario se actualizó.</b><div class="mini">Quien creó el viaje cambió el plan.</div></div>
+    <div id="itinList"></div>
+    <div class="card" id="itinFormCard" style="display:none">
+      <label>Añadir al itinerario (solo tú, que creaste el viaje)</label>
+      <div class="row" style="margin-top:8px">
+        <div><label>Día<input id="itinDay" type="date"></label></div>
+        <div><label>Hora<input id="itinTime" type="time"></label></div>
+      </div>
+      <label>Título<input id="itinTitle" placeholder="Visita a la bodega"></label>
+      <label>Nota (opcional)<input id="itinNote" placeholder="Llevar bañador…"></label>
+      <div class="row"><button id="btnItinAdd">＋ Añadir</button></div>
+    </div>
+  </section>
+
 <nav class="bottomnav" id="bottomNav">
   <button data-tab="diario"><span class="ic">📖</span>Diario</button>
   <button data-tab="gastos"><span class="ic">💶</span>Gastos</button>
   <button data-tab="donde"><span class="ic">📍</span>Dónde estamos</button>
+  <button data-tab="itin"><span class="ic">📋</span>Itinerario<span id="itinDot" style="display:none;color:#d9a441"> ●</span></button>
 </nav>
 <div id="toast" class="toast"></div>
-<div id="lightbox"><div style="text-align:right"><button id="btnCloseLb" class="sec" style="width:auto">Cerrar</button></div><img id="lbImg" alt=""><div class="t" id="lbTitle"></div><div class="n" id="lbNote"></div><div class="m" id="lbMeta"></div><div class="actions" id="lbActions"></div></div>
+<div id="lightbox"><div style="text-align:right"><button id="btnCloseLb" class="sec" style="width:auto">Cerrar</button></div><img id="lbImg" alt=""><div class="t" id="lbTitle"></div><div class="n" id="lbNote"></div><div class="m" id="lbMeta"></div><div id="lbTags" style="margin-top:8px"></div><div id="lbTagEdit" style="display:none;margin-top:8px"><label style="font-size:13px;color:#b8a888">Etiquetas (separadas por comas)<input id="lbTagInput" placeholder="playa, atardecer"></label><div class="row" style="margin-top:8px"><button class="sec" id="btnSaveTags">Guardar etiquetas</button></div></div><div class="actions" id="lbActions"></div></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
@@ -279,16 +294,16 @@ function showTab(name){
   const pane=document.getElementById('tab-'+name); if(pane) pane.classList.add('active');
   document.querySelectorAll('#bottomNav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===name));
   if(name==='donde'){ setTimeout(()=>{ try{map.invalidateSize()}catch(e){} },80); }
+  if(name==='itin'){ markItinSeen(); }
   const fab=document.getElementById('btnFabCam');
   if(fab) fab.style.display=(session && name==='diario')?'flex':'none';
   window.scrollTo({top:0,behavior:'smooth'});
   loadStart(); setTimeout(loadDone,320);
 }
 document.querySelectorAll('#bottomNav button').forEach(b=>b.addEventListener('click',()=>{
-  if(!session){ showTab('start'); toast('Primero crea tu viaje o únete con el código.'); return; }
+  if(!session){ showTab('start'); toast('Primero únete al viaje con el código.'); return; }
   showTab(b.dataset.tab);
 }));
-document.getElementById('btnChangeTrip').onclick=()=>showTab('start');
 document.getElementById('btnShareTrip').onclick=()=>{ showTab('start'); const sp=document.getElementById('sharePanel'); if(sp){ sp.style.display='block'; sp.scrollIntoView({behavior:'smooth',block:'center'}); } };
 
 /* MAPA (solo compañeros compartiendo) */
@@ -315,7 +330,7 @@ function renderSession(){
 }
 function redraw(){
   renderSession();
-  renderDiary(); renderExpenses(); renderWhere();
+  renderDiary(); renderExpenses(); renderWhere(); renderItinerary();
 }
 
 /* DIARIO — fotos por día */
@@ -324,6 +339,8 @@ const MESES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','
 function dayKey(iso){ const d=new Date(iso); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function dayLabel(iso){ const d=new Date(iso); return DIAS[d.getDay()]+' '+d.getDate()+' '+MESES[d.getMonth()]; }
 let diaryFilter=null; /* apodo filtrado en el Diario, null = todos */
+document.getElementById('diarySearch').addEventListener('input',()=>renderDiary());
+(function(){ const d=new Date(); const el=document.getElementById('itinDay'); if(el) el.value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); })();
 function renderDiary(){
   const box=document.getElementById('days');
   const places=(serverState && serverState.places)||[];
@@ -336,9 +353,11 @@ function renderDiary(){
     +'<button type="button" data-f="" class="'+(diaryFilter?'':'on')+'">Todos ('+places.length+')</button>'
     +authors.map(a=>'<button type="button" data-f="'+esc(a)+'" class="'+(diaryFilter===a?'on':'')+'">'+esc(a)+' ('+byA[a]+')</button>').join('')
     +'</div>';
-  const list=diaryFilter?places.filter(p=>authOf(p)===diaryFilter):places;
+  let list=diaryFilter?places.filter(p=>authOf(p)===diaryFilter):places;
+  const q=(document.getElementById('diarySearch').value||'').trim().toLowerCase();
+  if(q) list=list.filter(p=>((p.title||'')+' '+(p.note||'')+' '+(p.tags||'')).toLowerCase().includes(q));
   const head='<div class="grouph" style="margin-top:0">📸 '+list.length+' foto'+(list.length>1?'s':'')
-    +(diaryFilter?' de '+esc(diaryFilter):' en total')+'</div>';
+    +(diaryFilter?' de '+esc(diaryFilter):' en total')+(q?' · 🔍 «'+esc(q)+'»':'')+'</div>';
   if(!list.length){
     box.innerHTML=chips+head+'<div class="card empty"><div class="big">📸</div><div><b>Sin fotos de '+esc(diaryFilter||'')+'</b><br>Prueba con otro filtro.</div></div>';
   }else{
@@ -357,16 +376,32 @@ function renderDiary(){
     renderDiary();
   });
 }
+let lbPhotoId=null;
 window.openLb=id=>{
   const p=(serverState.places||[]).find(x=>x.id===id); if(!p) return;
+  lbPhotoId=id;
   document.getElementById('lbImg').src=p.photoUrl||'';
   document.getElementById('lbTitle').textContent=p.title||'';
   document.getElementById('lbNote').textContent=p.note||'';
   document.getElementById('lbMeta').textContent=(p.author?'por '+p.author:'')+' · '+hhmm(p.createdAt)+' · '+dayLabel(p.createdAt);
+  document.getElementById('lbTags').innerHTML=(p.tagList||[]).map(t=>'<span class="tag">'+esc(t)+'</span>').join('');
+  const canTag=session && (session.memberId===p.memberId || isOrganizer());
+  document.getElementById('lbTagEdit').style.display=canTag?'block':'none';
+  document.getElementById('lbTagInput').value=p.tags||'';
   const mine=session && (session.memberId===p.memberId || isOrganizer());
   document.getElementById('lbActions').innerHTML=mine?'<button class="sec" onclick="delPlace(\''+p.id+'\')">Eliminar</button>':'';
   document.getElementById('lightbox').style.display='block';
 };
+document.getElementById('btnSaveTags').onclick=()=>{ saving(document.getElementById('btnSaveTags'),async()=>{
+  if(!session||!lbPhotoId) return;
+  try{
+    const d=await api('/api/places/'+lbPhotoId+'/tags',{method:'POST',body:{tags:document.getElementById('lbTagInput').value.trim()}});
+    const p=(serverState.places||[]).find(x=>x.id===lbPhotoId);
+    if(p&&d.place){ p.tags=d.place.tags; p.tagList=d.place.tagList; }
+    document.getElementById('lbTags').innerHTML=(d.place.tagList||[]).map(t=>'<span class="tag">'+esc(t)+'</span>').join('');
+    toast('Etiquetas guardadas 🏷️');
+  }catch(e){ toast('Error: '+e.message); }
+}); };
 document.getElementById('btnCloseLb').onclick=()=>document.getElementById('lightbox').style.display='none';
 window.delPlace=id=>{ if(!session) return; if(!confirm('¿Eliminar esta foto del viaje?')) return; (async()=>{ try{ const r=await fetch('/api/places/'+id,{method:'DELETE',headers:{'X-Member-Token':session.memberToken}}); if(!r.ok){ const d=await r.json().catch(()=>({})); throw new Error(d.error||'Error '+r.status); } document.getElementById('lightbox').style.display='none'; await refreshState(true); toast('Foto eliminada.'); }catch(e){ toast('Error: '+e.message); } })(); };
 
@@ -402,8 +437,9 @@ document.getElementById('btnPlace').onclick=()=>{ saving(document.getElementById
   if(lastPos){ lat=+lastPos[0].toFixed(6); lng=+lastPos[1].toFixed(6); }
   else { try{ const p=await new Promise((res,rej)=>navigator.geolocation.getCurrentPosition(res,rej,{timeout:8000})); lat=+p.coords.latitude.toFixed(6); lng=+p.coords.longitude.toFixed(6); }catch(e){} }
   try{
-    await api('/api/trips/'+session.tripId+'/places',{method:'POST', body:{title:title, note:document.getElementById('pNote').value.trim(), photo:photoData||'', lat:lat, lng:lng}});
+    await api('/api/trips/'+session.tripId+'/places',{method:'POST', body:{title:title, note:document.getElementById('pNote').value.trim(), tags:document.getElementById('pTags').value.trim(), photo:photoData||'', lat:lat, lng:lng}});
     photoData=''; document.getElementById('pPreview').style.display='none'; document.getElementById('pPhoto').value=''; document.getElementById('photoWarn').textContent=''; document.getElementById('pTitle').value=''; document.getElementById('pNote').value='';
+    document.getElementById('pTags').value='';
     document.getElementById('photoFormWrap').style.display='none'; document.getElementById('btnTogglePhotoForm').textContent='📸 Añadir foto';
     await refreshState(true); toast('Guardado en el diario 📸');
   }catch(e){ toast('Error: '+e.message); }
@@ -503,6 +539,102 @@ document.getElementById('btnSettle').onclick=()=>{ saving(document.getElementByI
   }catch(e){ toast('Error: '+e.message); }
 }); };
 
+/* ITINERARIO (lo rellena quien creó el viaje; el resto lo ve) */
+function itinSeenKey(){ return 'itinSeen_'+(session?session.tripId:''); }
+function renderItinerary(){
+  const box=document.getElementById('itinList'); if(!box) return;
+  const it=(serverState && serverState.itinerary)||{items:[]};
+  const items=it.items||[];
+  const org=isOrganizer();
+  document.getElementById('itinFormCard').style.display=org?'block':'none';
+  const key=itinSeenKey(), seen=localStorage.getItem(key);
+  if(!seen && it.updatedAt) localStorage.setItem(key,it.updatedAt);
+  const changed=!!(it.updatedAt && seen && it.updatedAt>seen && !org);
+  document.getElementById('itinDot').style.display=changed?'inline':'none';
+  document.getElementById('itinBanner').style.display=changed?'block':'none';
+  if(!items.length){
+    box.innerHTML='<div class="card empty"><div class="big">📋</div><div>'+(org?'<b>Aún no hay plan</b><br>Añade abajo el primer punto del viaje.':'<b>Aún no hay plan</b><br>Quien creó el viaje lo está preparando.')+'</div></div>';
+  }else{
+    const groups={}, order=[];
+    items.forEach(x=>{ if(!(x.day in groups)){ groups[x.day]=[]; order.push(x.day); } groups[x.day].push(x); });
+    box.innerHTML=order.map(d=>'<div class="grouph">'+esc(dayLabel(d+'T12:00:00'))+'</div>'+groups[d].map(x=>
+      '<div class="expense"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>'+(x.time?esc(x.time)+' · ':'')+esc(x.title)+'</b>'
+      +(org?'<button class="sec" style="width:auto;min-height:0;padding:8px 14px;flex:0 0 auto" onclick="delItin(\''+x.id+'\')">✕</button>':'')
+      +'</div>'+(x.note?'<div class="mini" style="margin-top:4px">'+esc(x.note)+'</div>':'')+'</div>'
+    ).join('')).join('');
+  }
+  loadContext();
+}
+function markItinSeen(){
+  const it=(serverState && serverState.itinerary)||{};
+  if(it.updatedAt) localStorage.setItem(itinSeenKey(),it.updatedAt);
+  const d=document.getElementById('itinDot'); if(d) d.style.display='none';
+  const b=document.getElementById('itinBanner'); if(b) b.style.display='none';
+}
+document.getElementById('btnItinAdd').onclick=()=>{ saving(document.getElementById('btnItinAdd'),async()=>{
+  if(!session) return;
+  const day=document.getElementById('itinDay').value, time=document.getElementById('itinTime').value;
+  const title=document.getElementById('itinTitle').value.trim();
+  if(!day){ toast('Elige el día.'); return; }
+  if(!title){ toast('Pon un título.'); return; }
+  try{
+    await api('/api/trips/'+session.tripId+'/itinerary',{method:'POST',body:{day:day,time:time,title:title,note:document.getElementById('itinNote').value.trim()}});
+    document.getElementById('itinTitle').value=''; document.getElementById('itinNote').value='';
+    await refreshState(true); markItinSeen(); toast('Añadido al itinerario 📋');
+  }catch(e){ toast('Error: '+e.message); }
+}); };
+window.delItin=id=>{ if(!session) return; if(!confirm('¿Quitar este punto del itinerario?')) return;
+  (async()=>{ try{
+    const r=await fetch('/api/itinerary/'+id,{method:'DELETE',headers:{'X-Member-Token':session.memberToken}});
+    if(!r.ok){ const d=await r.json().catch(()=>({})); throw new Error(d.error||'Error '+r.status); }
+    await refreshState(true); markItinSeen(); toast('Quitado del itinerario.');
+  }catch(e){ toast('Error: '+e.message); } })(); };
+
+/* CONTEXTO DEL DESTINO: previsión (Open-Meteo) + resumen (Wikipedia). Todo en el móvil, sin claves. */
+let ctxDest='';
+function wmoEmoji(c){
+  c=+c;
+  if(c===0) return '☀️'; if(c<=2) return '🌤️'; if(c===3) return '☁️';
+  if(c===45||c===48) return '🌫️'; if(c>=51&&c<=57) return '🌦️';
+  if(c>=61&&c<=67) return '🌧️'; if(c>=71&&c<=77) return '🌨️';
+  if(c>=80&&c<=82) return '🌦️'; if(c>=95) return '⛈️';
+  return '🌤️';
+}
+async function loadContext(){
+  const box=document.getElementById('itinContext'); if(!box) return;
+  const dest=((serverState && serverState.trip && serverState.trip.destination)||'').trim();
+  if(!dest){ box.innerHTML=''; ctxDest=''; return; }
+  if(ctxDest===dest && box.innerHTML) return;
+  ctxDest=dest;
+  box.innerHTML='<div class="card"><b>📍 '+esc(dest)+'</b><div class="mini">Cargando contexto…</div></div>';
+  let html='<div class="card"><b>📍 '+esc(dest)+'</b>';
+  try{
+    const g=await (await fetch('https://geocoding-api.open-meteo.com/v1/search?name='+encodeURIComponent(dest)+'&count=1&language=es')).json();
+    if(g.results && g.results[0]){
+      const w=await (await fetch('https://api.open-meteo.com/v1/forecast?latitude='+g.results[0].latitude+'&longitude='+g.results[0].longitude+'&daily=weathercode,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=3')).json();
+      if(w.daily && w.daily.time && w.daily.time.length){
+        const DC=['dom','lun','mar','mié','jue','vie','sáb'];
+        html+='<div class="mini" style="margin-top:8px"><b>Previsión</b></div><div style="display:flex;gap:8px;margin-top:4px">';
+        for(let i=0;i<w.daily.time.length;i++){
+          const dt=new Date(w.daily.time[i]+'T12:00:00');
+          html+='<div style="flex:1;text-align:center;background:#241b0f;border-radius:8px;padding:8px 4px"><div class="mini">'+DC[dt.getDay()]+'</div><div style="font-size:22px">'+wmoEmoji(w.daily.weathercode[i])+'</div><div style="font-weight:800">'+Math.round(w.daily.temperature_2m_max[i])+'°</div><div class="mini">'+Math.round(w.daily.temperature_2m_min[i])+'°</div></div>';
+        }
+        html+='</div>';
+      }
+    }
+  }catch(e){}
+  try{
+    const wk=await (await fetch('https://es.wikipedia.org/api/rest_v1/page/summary/'+encodeURIComponent(dest))).json();
+    if(wk.extract){
+      const txt=wk.extract.split('. ').slice(0,3).join('. ');
+      html+='<div class="mini" style="margin-top:10px">'+esc(txt)+(txt.length<wk.extract.length?'…':'')+'</div>';
+      if(wk.thumbnail && wk.thumbnail.source) html+='<img src="'+esc(wk.thumbnail.source)+'" style="width:100%;max-height:140px;object-fit:cover;border-radius:8px;margin-top:6px" loading="lazy">';
+    }
+  }catch(e){}
+  html+='</div>';
+  if(ctxDest===dest) box.innerHTML=html;
+}
+
 /* DONDE ESTAMOS */
 function renderWhere(){
   const mem=members();
@@ -556,18 +688,6 @@ function setSessionFromResponse(d, nickname){
   localStorage.setItem(SES_KEY,JSON.stringify(session));
   expPayer=session.nickname;
 }
-document.getElementById('btnCreate').onclick=()=>{ saving(document.getElementById('btnCreate'),async()=>{
-  const name=document.getElementById('tName').value.trim(); const nick=document.getElementById('tNick').value.trim();
-  if(!name){ toast('Pon un nombre al viaje.'); return; }
-  if(!nick){ toast('Pon tu apodo (así te verá el grupo).'); return; }
-  try{
-    const d=await api('/api/trips',{method:'POST', auth:false, body:{name:name, nickname:nick, deviceId:deviceId()}});
-    setSessionFromResponse(d, nick);
-    await refreshState(true); heartbeat();
-    toast('Viaje creado. Código '+session.inviteCode+' — compártelo solo con tu grupo.');
-    showTab('diario');
-  }catch(e){ document.getElementById('serverError').style.display='block'; toast('Error al crear: '+e.message); }
-}); };
 document.getElementById('btnJoin').onclick=()=>{ saving(document.getElementById('btnJoin'),async()=>{
   const code=document.getElementById('jCode').value.trim().toUpperCase(); const nick=document.getElementById('jNick').value.trim();
   if(!code){ toast('Pon el código del viaje.'); return; }
