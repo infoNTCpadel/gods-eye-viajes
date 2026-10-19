@@ -1,32 +1,18 @@
-GOD'S EYE VIAJES — Fase 2B (en tu VPS)
-=======================================
+DIARIO DE VIAJE (pivote God's Eye — uso personal)
+=================================================
 
-Qué es: viaje privado con código (6 letras). El organizador crea la
-ruta; todo el grupo ve lo mismo, sube fotos/sitios y al final ve un
-Replay que se para en cada sitio con su foto. Descargable en vídeo.
+Qué es: un viaje privado con código de 6 letras donde el grupo de
+compañeros comparte tres cosas, y nada más:
+1) DIARIO: las fotos del grupo ordenadas por días, como un álbum.
+2) GASTOS: quién pagó qué, balances y saldar cuentas al mínimo de pagos.
+3) DÓNDE ESTAMOS: mapa con los compañeros que estén compartiendo su
+   ubicación, con interruptor de privacidad.
 
-Novedades 2B:
-- Fotos y sitios EN EL SERVIDOR: cualquier miembro sube con el botón
-  📸 (foto → título → Guardar, 2-3 toques). Se ven en el muro de
-  Lugares (por "Ana", agrupadas por parada) y como pins en el mapa.
-  Solo el autor o el organizador puede borrar una foto.
-- Textos cortos: la invitación vive en el botón "Compartir viaje"
-  de la cabecera (código + enlace + WhatsApp), no siempre visible.
-- Replay: se para 3 s en cada sitio mostrando su foto grande, y en
-  Replay hay "⬇ Descargar Replay en vídeo" (WebM vertical 720x1280
-  grabado con Canvas; si el navegador no puede, descarga un PNG).
-
-Datos en tu servidor (volumen Docker gods-eye-data):
-- SQLite: /data/app.db (viajes, miembros, paradas, lugares)
-- Fotos: /data/photos/<viaje>/<uuid>.jpg, servidas en
-  /api/photos/<viaje>/<fichero> sin token: la URL lleva un uuid no
-  adivinable; quien tenga esa URL exacta ve esa foto. No publiques
-  esas URLs si no quieres compartir esa foto.
-- No hagas "docker compose down -v" o borras los viajes y las fotos.
+Sin cuentas: se entra con código + apodo. Sin ruta del organizador,
+sin replay, sin grabación de recorridos.
 
 DESPLIEGUE (repo: infoNTCpadel/gods-eye-viajes)
 ------------------------------------------------
-Ya desplegado:
   cd /opt/gods-eye-viajes
   git pull
   docker compose up -d --build
@@ -34,20 +20,46 @@ Ya desplegado:
 
 Desde cero: DNS A de "viajes" a tu IP, git clone del repo,
 cp .env.example .env (solo DOMAIN), docker compose up -d --build.
+No hagas "docker compose down -v" o borras viajes, fotos y gastos.
 
-PRUEBA EN 2 MINUTOS (dos móviles)
+GASTOS — cómo funciona
+----------------------
+- Añadir: importe (teclado numérico grande) → descripción → quién pagó
+  → reparto Igual por defecto con vista previa en vivo de lo que toca
+  a cada uno. Se puede desmarcar a quien no estaba; modos Igual /
+  Cantidades / Participaciones (el último modo usado se recuerda).
+  Foto del ticket opcional.
+- Balances por persona: verde = le deben, rojo = debe.
+- "Saldar cuentas": propone quién paga a quién con el mínimo de pagos;
+  "Registrar pago" anota un Bizum/efectivo ya hecho (el dinero se mueve
+  fuera de la app, la app es el libro).
+- Cualquiera puede añadir gastos; solo quien lo registró o el
+  organizador puede borrarlo.
+
+PRIVACIDAD DEL LOCALIZADOR
+--------------------------
+- OFF por defecto. Al activar eliges duración: 15 min / 1 h / 8 h.
+- Caduca solo: el servidor deja de guardar y de exponer tu posición
+  cuando se acaba el tiempo; sin sharing activo NO hay posición en la
+  base de datos ni en la API.
+- Banner visible mientras compartes ("Compartiendo tu ubicación ·
+  quedan ~X min"), con botón de apagar en un toque.
+- Quien no comparte aparece como "no comparte ubicación": pausar es
+  visible para el grupo, no hay modo oculto.
+- La posición solo funciona con la app abierta: la PWA no tiene GPS
+  en segundo plano (los navegadores no lo permiten). Si cierras la
+  app, dejas de actualizar tu posición.
+- Las fotos se sirven en /api/photos/<viaje>/<fichero> sin token: la
+  URL lleva un uuid no adivinable; quien tenga esa URL exacta ve esa
+  foto. No publiques esas URLs si no quieres compartir esa foto.
+
+PRUEBA EN 3 MINUTOS (dos móviles)
 ---------------------------------
-1. A crea el viaje y pasa el código (botón Compartir viaje).
+1. A crea el viaje y pasa el código (Compartir viaje).
 2. B entra con código + apodo.
-3. A añade una parada en Ruta. B la ve y pulsa "✓ Hemos llegado".
-4. B pulsa 📸, hace una foto, Guardar en el viaje.
-5. A la ve en Lugares y en el mapa; Replay se para en esa foto.
-6. En Replay: "⬇ Descargar Replay en vídeo" y compártelo.
-
-SI ALGO FALLA
--------------
-- /api/health sin {"ok": true}: mira docker compose ps y logs.
-- 404/autofirmado de Traefik: contenedor no Up; el compose no debe
-  declarar "networks" (tu Traefik va en modo host, como padel-app).
-- Pantalla vieja en el móvil: cierra y reabre la PWA (caché v5).
-- GPS: hace falta HTTPS y permiso; sin moverte, "Simular paseo".
+3. B pulsa 📸, hace una foto y la guarda. A la ve en el Diario.
+4. A añade un gasto "Cena 60 €", paga Ana, participan Ana y B.
+   Ambos ven: Ana +30, B −30, y "Saldar: B → Ana 30 €".
+5. B registra el pago B→Ana 30 €. Los balances quedan a 0.
+6. A activa "Compartir mi ubicación" 15 min. B le ve en el mapa.
+   A lo apaga: B ve "no comparte ubicación".
