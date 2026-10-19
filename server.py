@@ -94,9 +94,13 @@ def init_db():
             c.execute("ALTER TABLE members ADD COLUMN sharing_until TEXT DEFAULT ''")
         ecols = {r["name"] for r in c.execute("PRAGMA table_info(expenses)")}
         for col, typ in (("currency", "TEXT DEFAULT 'EUR'"), ("split_mode", "TEXT DEFAULT 'equal'"),
-                         ("participants_json", "TEXT DEFAULT '[]'"), ("photo_path", "TEXT DEFAULT ''")):
+                         ("participants_json", "TEXT DEFAULT '[]'"), ("photo_path", "TEXT DEFAULT ''"),
+                         ("kind", "TEXT DEFAULT 'expense'"), ("from_pot", "INTEGER DEFAULT 0")):
             if col not in ecols:
                 c.execute("ALTER TABLE expenses ADD COLUMN %s %s" % (col, typ))
+        tcols = {r["name"] for r in c.execute("PRAGMA table_info(trips)")}
+        if "treasurer_member_id" not in tcols:
+            c.execute("ALTER TABLE trips ADD COLUMN treasurer_member_id TEXT DEFAULT ''")
 
 
 def new_code(c):
@@ -159,10 +163,13 @@ def expense_public(r):
         parts = json.loads(r["participants_json"] or "[]")
     except Exception:
         parts = []
+    keys = r.keys() if hasattr(r, "keys") else []
     return {
         "id": r["id"], "payer": r["payer_nickname"], "description": r["description"] or "",
         "amountCents": r["amount_cents"], "amount": money(r["amount_cents"]),
         "splitMode": r["split_mode"] or "equal", "parts": parts,
+        "kind": (r["kind"] if "kind" in keys and r["kind"] else "expense"),
+        "fromPot": bool(r["from_pot"]) if "from_pot" in keys else False,
         "photoUrl": ("/api/photos/%s/%s" % (r["trip_id"], r["photo_path"]) if r["photo_path"] else ""),
         "authorMemberId": r["member_id"] or "", "createdAt": r["created_at"],
     }
@@ -218,6 +225,16 @@ def who_pays_whom(nets):
     return out
 
 
+def get_treasurer(c, trip_id):
+    """Devuelve (member_id, nickname) del tesorero o ('','') si no hay."""
+    row = c.execute("SELECT treasurer_member_id FROM trips WHERE id=?", (trip_id,)).fetchone()
+    mid = (row["treasurer_member_id"] if row and "treasurer_member_id" in row.keys() else "") or ""
+    if not mid:
+        return "", ""
+    m = c.execute("SELECT nickname FROM members WHERE id=?", (mid,)).fetchone()
+    return mid, (m["nickname"] if m else "")
+
+
 def trip_state(c, trip_row):
     members = [member_public(r) for r in c.execute("SELECT * FROM members WHERE trip_id=? ORDER BY created_at", (trip_row["id"],))]
     places = []
@@ -232,6 +249,15 @@ def trip_state(c, trip_row):
     balances = [{"nickname": n, "paidCents": paid[n], "paid": money(paid[n]),
                  "shareCents": owed[n], "share": money(owed[n]),
                  "balanceCents": nets[n], "balance": money(abs(nets[n]))} for n in nicknames]
+    _tmid, treasurer_nick = get_treasurer(c, trip_row["id"])
+    contributed = sum(e["amountCents"] for e in expenses if e["kind"] == "contribution")
+    spent_pot = sum(e["amountCents"] for e in expenses if e["fromPot"])
+    pot = {
+        "treasurer": treasurer_nick,
+        "contributedCents": contributed, "contributed": money(contributed),
+        "spentFromPotCents": spent_pot, "spentFromPot": money(spent_pot),
+        "remainingCents": contributed - spent_pot, "remaining": money(contributed - spent_pot),
+    }
     return {
         "trip": trip_public(trip_row),
         "members": members,
@@ -240,6 +266,7 @@ def trip_state(c, trip_row):
         "settlements": settlements,
         "balances": balances,
         "whoPaysWhom": who_pays_whom(nets),
+        "pot": pot,
     }
 
 
@@ -349,6 +376,10 @@ class H(BaseHTTPRequestHandler):
                 return self.create_expense(parts[2])
             if len(parts) == 4 and parts[0] == "api" and parts[1] == "trips" and parts[3] == "settlements":
                 return self.create_settlement(parts[2])
+            if len(parts) == 4 and parts[0] == "api" and parts[1] == "trips" and parts[3] == "treasurer":
+                return self.set_treasurer(parts[2])
+            if len(parts) == 5 and parts[0] == "api" and parts[1] == "trips" and parts[3] == "pot" and parts[4] == "contribute":
+                return self.pot_contribute(parts[2])
             return self.err(404, "no encontrado")
         except ValueError as e:
             return self.err(400, str(e))
@@ -521,7 +552,8 @@ class H(BaseHTTPRequestHandler):
             return self.err(400, "importe invalido")
         if total <= 0:
             return self.err(400, "el importe tiene que ser mayor que 0")
-        payer = clean_str(b.get("payer"), 30, "payer")
+        payer_raw = clean_str(b.get("payer"), 30, "payer")
+        from_pot = 1 if b.get("from_pot") else 0
         mode = clean_str(b.get("split_mode"), 12, "split_mode") or "equal"
         if mode not in ("equal", "amounts", "shares"):
             return self.err(400, "split_mode invalido")
@@ -530,6 +562,10 @@ class H(BaseHTTPRequestHandler):
             return self.err(400, "elige quien participa en el gasto")
         with LOCK, db() as c:
             nicks = self.member_nicks(c, trip_id)
+            _tmid, treasurer_nick = get_treasurer(c, trip_id)
+            if from_pot and not treasurer_nick:
+                return self.err(400, "designa primero quién lleva el bote")
+            payer = payer_raw or (treasurer_nick if from_pot else "")
             if payer not in nicks:
                 return self.err(400, "quien paga tiene que ser del viaje")
             pn = []
@@ -575,10 +611,10 @@ class H(BaseHTTPRequestHandler):
             photo_path = save_photo_b64(b.get("photo") or "", trip_id)
             eid = uuid.uuid4().hex
             c.execute(
-                "INSERT INTO expenses(id,trip_id,member_id,payer_nickname,description,amount_cents,currency,split_mode,participants_json,photo_path,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO expenses(id,trip_id,member_id,payer_nickname,description,amount_cents,currency,split_mode,participants_json,kind,from_pot,photo_path,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (eid, trip_id, m["id"], payer, clean_str(b.get("description"), 90, "description") or "Gasto",
                  total, clean_str(b.get("currency"), 3, "currency") or "EUR", mode,
-                 json.dumps(parts, ensure_ascii=False), photo_path, now_iso()),
+                 json.dumps(parts, ensure_ascii=False), "expense", from_pot, photo_path, now_iso()),
             )
             r = c.execute("SELECT * FROM expenses WHERE id=?", (eid,)).fetchone()
         self.send_json(201, {"ok": True, "expense": expense_public(r)})
@@ -625,6 +661,58 @@ class H(BaseHTTPRequestHandler):
             )
             r = c.execute("SELECT * FROM settlements WHERE id=?", (sid,)).fetchone()
         self.send_json(201, {"ok": True, "settlement": settlement_public(r)})
+
+    def set_treasurer(self, trip_id):
+        """Designa o cambia quien lleva el bote. Cualquier miembro (confianza)."""
+        a = self.auth(trip_id)
+        if not a:
+            return
+        _m, _t = a
+        b = self.read_json()
+        nick = clean_str(b.get("nickname"), 30, "nickname")
+        with LOCK, db() as c:
+            if nick:
+                r = c.execute("SELECT id, nickname FROM members WHERE trip_id=? AND nickname=?",
+                              (trip_id, nick)).fetchone()
+                if not r:
+                    return self.err(400, "ese apodo no es del viaje")
+                c.execute("UPDATE trips SET treasurer_member_id=? WHERE id=?", (r["id"], trip_id))
+                out = r["nickname"]
+            else:
+                c.execute("UPDATE trips SET treasurer_member_id='' WHERE id=?", (trip_id,))
+                out = ""
+        self.send_json(200, {"ok": True, "treasurer": out})
+
+    def pot_contribute(self, trip_id):
+        """Aportacion al bote: la crea como expense kind=contribution, participants=[tesorero]."""
+        a = self.auth(trip_id)
+        if not a:
+            return
+        m, _t = a
+        b = self.read_json()
+        try:
+            total = int(round(float(b.get("amount") or 0) * 100))
+        except Exception:
+            return self.err(400, "importe invalido")
+        if total <= 0:
+            return self.err(400, "el importe tiene que ser mayor que 0")
+        nick = clean_str(b.get("nickname"), 30, "nickname") or m["nickname"]
+        with LOCK, db() as c:
+            nicks = self.member_nicks(c, trip_id)
+            if nick not in nicks:
+                return self.err(400, "quien aporta tiene que ser del viaje")
+            _tmid, treasurer_nick = get_treasurer(c, trip_id)
+            if not treasurer_nick:
+                return self.err(400, "designa primero quién lleva el bote")
+            eid = uuid.uuid4().hex
+            c.execute(
+                "INSERT INTO expenses(id,trip_id,member_id,payer_nickname,description,amount_cents,currency,split_mode,participants_json,kind,from_pot,photo_path,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (eid, trip_id, m["id"], nick, "Aportación al bote de " + nick, total, "EUR", "equal",
+                 json.dumps([{"nickname": treasurer_nick, "cents": total}], ensure_ascii=False),
+                 "contribution", 0, "", now_iso()),
+            )
+            r = c.execute("SELECT * FROM expenses WHERE id=?", (eid,)).fetchone()
+        self.send_json(201, {"ok": True, "expense": expense_public(r)})
 
     def serve_photo(self, p):
         parts = [unquote(x) for x in p.split("/") if x]

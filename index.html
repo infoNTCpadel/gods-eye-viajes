@@ -125,12 +125,16 @@ a{color:#e8c877}
   <!-- GASTOS -->
   <section id="tab-gastos" class="tab">
     <h2>Gastos del viaje</h2>
+    <div id="potBox"></div>
     <div id="balances"></div>
     <div class="row"><button id="btnToggleExpForm" class="big">＋ Añadir gasto</button></div>
     <div id="expFormWrap" class="card" style="display:none">
       <label>Importe<input id="eAmount" class="amount" inputmode="decimal" placeholder="0,00"></label>
       <label>Descripción<input id="eDesc" placeholder="Cena"></label>
-      <label>Quién pagó</label>
+      <div id="potToggleWrap" class="catchips" style="display:none;margin-top:10px">
+        <button type="button" id="btnFromPot">🫙 Pagado del bote</button>
+      </div>
+      <label id="payerLabel">Quién pagó</label>
       <div class="catchips" id="payerChips"></div>
       <label>Participan</label>
       <div class="catchips" id="partChips"></div>
@@ -204,6 +208,7 @@ let lastPos=null, geoWatch=null;
 let sharing={on:false, until:0};
 let expMode=localStorage.getItem(MODE_KEY)||'equal';
 let expPayer='', expParts={};
+let expFromPot=false;
 function loadJson(k,d){ try{ const v=JSON.parse(localStorage.getItem(k)); return v==null?d:v; }catch(e){ return d; } }
 function deviceId(){ let d=localStorage.getItem(DEV_KEY); if(!d){ d='dev-'+Math.random().toString(36).slice(2)+Date.now().toString(36); localStorage.setItem(DEV_KEY,d); } return d; }
 function isOrganizer(){ return !!(session && session.role==='organizer'); }
@@ -361,6 +366,35 @@ document.getElementById('btnPlace').onclick=async()=>{
 };
 
 /* GASTOS */
+/* BOTE COMUN */
+function renderPot(){
+  const box=document.getElementById('potBox'); if(!box) return;
+  const wrap=document.getElementById('potContribWrap');
+  if(wrap && wrap.style.display!=='none') return; // no pisar mientras se escribe el importe
+  const pot=(serverState && serverState.pot)||{};
+  const mem=members();
+  if(!pot.treasurer){
+    box.innerHTML='<div class="card"><b>🫙 Bote común</b><div class="mini">¿Hacéis fondo común? Elegid quién lo lleva.</div><div class="catchips" style="margin-top:8px">'+mem.map(m=>'<button type="button" data-n="'+esc(m.nickname)+'">'+esc(m.nickname)+'</button>').join('')+'</div></div>';
+    box.querySelectorAll('button').forEach(b=>b.onclick=async()=>{
+      try{ await api('/api/trips/'+session.tripId+'/treasurer',{method:'POST',body:{nickname:b.dataset.n}}); await refreshState(true); toast('El bote lo lleva '+b.dataset.n+' 🫙'); }
+      catch(e){ toast('Error: '+e.message); }
+    });
+    return;
+  }
+  box.innerHTML='<div class="card" style="border-color:#d9a441"><b>🫙 Bote: '+esc(pot.treasurer)+'</b><div class="mini">aportado '+esc(pot.contributed)+' · gastado del bote '+esc(pot.spentFromPot)+' · quedan <b>'+esc(pot.remaining)+'</b></div><div class="row"><button id="btnPotContrib">Aportar al bote</button></div><div id="potContribWrap" style="display:none;margin-top:8px"><div class="mini">Aportas como <b>'+esc(session?session.nickname:'')+'</b></div><label>Importe<input id="potAmount" class="amount" inputmode="decimal" placeholder="0,00"></label><div class="row"><button id="btnPotGo">Aportar</button></div></div></div>';
+  document.getElementById('btnPotContrib').onclick=()=>{
+    const w=document.getElementById('potContribWrap'); w.style.display=(w.style.display==='none')?'block':'none';
+  };
+  document.getElementById('btnPotGo').onclick=async()=>{
+    const amount=parseAmt(document.getElementById('potAmount').value);
+    if(amount<=0){ toast('Pon el importe.'); return; }
+    try{
+      await api('/api/trips/'+session.tripId+'/pot/contribute',{method:'POST',body:{amount:amount}});
+      document.getElementById('potAmount').value=''; document.getElementById('potContribWrap').style.display='none';
+      await refreshState(true); toast('Aportación al bote 🫙');
+    }catch(e){ toast('Error: '+e.message); }
+  };
+}
 function members(){ return (serverState && serverState.members)||[]; }
 function splitPreview(){
   const total=parseAmt(document.getElementById('eAmount').value);
@@ -385,6 +419,7 @@ function splitPreview(){
   box.innerHTML='<b>'+fmtEuro(Math.round(total*100))+'</b> se reparte:<br>'+lines.join('<br>');
 }
 function renderExpenses(){
+  renderPot();
   const bs=(serverState && serverState.balances)||[];
   const bBox=document.getElementById('balances');
   if(!bs.length){ bBox.innerHTML=''; }
@@ -397,9 +432,20 @@ function renderExpenses(){
   }
   // formulario: chips
   const mem=members();
+  const pot0=(serverState && serverState.pot)||{};
+  if(expFromPot && pot0.treasurer) expPayer=pot0.treasurer;
   if(!expPayer && session) expPayer=session.nickname;
   document.getElementById('payerChips').innerHTML=mem.map(m=>'<button type="button" data-n="'+esc(m.nickname)+'" class="'+(m.nickname===expPayer?'on':'')+'">'+esc(m.nickname)+'</button>').join('');
   document.querySelectorAll('#payerChips button').forEach(b=>b.onclick=()=>{ expPayer=b.dataset.n; renderExpenses(); });
+  // toggle "pagado del bote"
+  const ptw=document.getElementById('potToggleWrap');
+  if(pot0.treasurer){ ptw.style.display='flex'; } else { ptw.style.display='none'; expFromPot=false; }
+  const bfp=document.getElementById('btnFromPot');
+  if(bfp){ bfp.classList.toggle('on',expFromPot); bfp.onclick=()=>{ expFromPot=!expFromPot; renderExpenses(); splitPreview(); }; }
+  const pc=document.getElementById('payerChips');
+  pc.style.opacity=expFromPot?'.45':''; pc.style.pointerEvents=expFromPot?'none':'';
+  const pl=document.getElementById('payerLabel');
+  if(pl) pl.textContent=expFromPot?('Pagado del bote ('+pot0.treasurer+')'):'Quién pagó';
   mem.forEach(m=>{ if(!(m.nickname in expParts)) expParts[m.nickname]={on:true,val:''}; });
   document.getElementById('partChips').innerHTML=mem.map(m=>'<button type="button" data-n="'+esc(m.nickname)+'" class="'+(expParts[m.nickname].on?'on':'off')+'">'+(expParts[m.nickname].on?'✓ ':'')+esc(m.nickname)+'</button>').join('');
   document.querySelectorAll('#partChips button').forEach(b=>b.onclick=()=>{ const n=b.dataset.n; expParts[n].on=!expParts[n].on; renderExpenses(); });
@@ -408,7 +454,8 @@ function renderExpenses(){
   const ex=(serverState && serverState.expenses)||[];
   document.getElementById('expenses').innerHTML=ex.length?ex.slice().reverse().map(e=>{
     const mine=session && (session.memberId===e.authorMemberId || isOrganizer());
-    return '<div class="expense"><div style="display:flex;justify-content:space-between;align-items:center"><b>'+esc(e.description)+'</b><span class="amt">'+esc(e.amount)+'</span></div><div class="mini">Pagó '+esc(e.payer)+' · '+hhmm(e.createdAt)+'</div><div class="mini">'+e.parts.map(p=>esc(p.nickname)+' '+(p.cents/100).toFixed(2).replace('.',',')+'€').join(' · ')+'</div>'+(e.photoUrl?'<img src="'+esc(e.photoUrl)+'" style="width:100%;max-height:140px;object-fit:cover;border-radius:8px;margin-top:6px">':'')+(mine?'<div class="actions"><button class="sec" onclick="delExpense(\''+e.id+'\')">Eliminar</button></div>':'')+'</div>';
+    const badge=e.kind==='contribution'?'<span class="mini" style="color:#7fb069">🫙 bote</span> ':(e.fromPot?'<span class="mini" style="color:#d9a441">del bote</span> ':'');
+    return '<div class="expense"><div style="display:flex;justify-content:space-between;align-items:center"><b>'+badge+esc(e.description)+'</b><span class="amt">'+esc(e.amount)+'</span></div><div class="mini">Pagó '+esc(e.payer)+' · '+hhmm(e.createdAt)+'</div><div class="mini">'+e.parts.map(p=>esc(p.nickname)+' '+(p.cents/100).toFixed(2).replace('.',',')+'€').join(' · ')+'</div>'+(e.photoUrl?'<img src="'+esc(e.photoUrl)+'" style="width:100%;max-height:140px;object-fit:cover;border-radius:8px;margin-top:6px">':'')+(mine?'<div class="actions"><button class="sec" onclick="delExpense(\''+e.id+'\')">Eliminar</button></div>':'')+'</div>';
   }).join(''):'<div class="card">Sin gastos todavía.</div>';
   // saldar
   const w=(serverState && serverState.whoPaysWhom)||[];
@@ -430,8 +477,9 @@ document.getElementById('btnExpense').onclick=async()=>{
   if(expMode==='amounts'){ parts=names.map(n=>({nickname:n, amount:parseFloat(String(expParts[n].val||'0').replace(',','.'))||0})); }
   else if(expMode==='shares'){ parts=names.map(n=>({nickname:n, share:parseFloat(String(expParts[n].val||'1').replace(',','.'))||1})); }
   try{
-    await api('/api/trips/'+session.tripId+'/expenses',{method:'POST',body:{description:document.getElementById('eDesc').value.trim()||'Gasto', amount:amount, payer:expPayer||session.nickname, participants:parts, split_mode:expMode, photo:ticketData||''}});
+    await api('/api/trips/'+session.tripId+'/expenses',{method:'POST',body:{description:document.getElementById('eDesc').value.trim()||'Gasto', amount:amount, payer:expPayer||session.nickname, participants:parts, split_mode:expMode, from_pot:expFromPot, photo:ticketData||''}});
     document.getElementById('eAmount').value=''; document.getElementById('eDesc').value=''; ticketData=''; document.getElementById('ePreview').style.display='none'; document.getElementById('ePhoto').value='';
+    expFromPot=false;
     document.getElementById('expFormWrap').style.display='none'; document.getElementById('btnToggleExpForm').textContent='＋ Añadir gasto';
     await refreshState(true); toast('Gasto guardado 💶');
   }catch(e){ toast('Error: '+e.message); }
