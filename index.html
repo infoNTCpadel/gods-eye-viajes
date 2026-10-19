@@ -9,18 +9,19 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
-*{box-sizing:border-box}html,body{margin:0;padding:0;background:#14100c;color:#f3ead6;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-.topbar{position:sticky;top:0;z-index:1200;background:linear-gradient(#1d1710,#14100c);padding:10px 14px;border-bottom:1px solid #3a2c18}
+*{box-sizing:border-box}html,body{margin:0;padding:0;background:#14100c;color:#f3ead6;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;overflow-x:hidden}body{-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%}
+.topbar{position:sticky;top:0;z-index:1200;background:linear-gradient(#1d1710,#14100c);padding:calc(10px + env(safe-area-inset-top)) 14px 10px;border-bottom:1px solid #3a2c18}
 .topbar .brand{font-size:18px;color:#e8c877;font-weight:800}
-.topbar .tripname{font-size:15px;font-weight:700;margin-top:4px}
+.topbar .tripname{font-size:15px;font-weight:700;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .topbar .nowline{font-size:12px;color:#b8a888;margin-top:2px}
-.wrap{padding:12px 14px 110px;max-width:720px;margin:0 auto}
+.wrap{padding:12px 14px calc(128px + env(safe-area-inset-bottom));max-width:560px;margin:0 auto}
 .tab{display:none}.tab.active{display:block}
 h2{font-size:19px;color:#e8c877;margin:6px 0 10px}
 #map{height:52vh;min-height:320px;border-radius:14px;border:1px solid #3a2c18;background:#0d0a07}
 .leaflet-container{background:#0d0a07}
 .leaflet-tile{filter:grayscale(1) invert(0.92) brightness(0.9) contrast(0.9) sepia(0.25)}
-button{background:#d9a441;color:#14100c;border:0;border-radius:12px;padding:14px;font-weight:800;font-size:16px;min-height:56px;width:100%}
+button{background:#d9a441;color:#14100c;border:0;border-radius:12px;padding:14px;font-weight:800;font-size:16px;min-height:56px;width:100%;touch-action:manipulation;cursor:pointer;transition:transform .08s ease,filter .08s ease}
+button:active{transform:scale(.97);filter:brightness(1.12)}
 button.sec{background:#2a2114;color:#f3ead6;border:1px solid #4a3a20}
 button.warn{background:#a63d40;color:#fff}
 button.big{min-height:64px;font-size:18px}
@@ -34,20 +35,21 @@ textarea{min-height:64px}
 input.amount{font-size:34px;font-weight:800;text-align:center;color:#e8c877;padding:14px}
 .mini{font-size:13px;color:#b8a888;line-height:1.5}
 .actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
-.actions button{padding:8px 10px;font-size:13px;min-height:44px;width:auto}
-.toast{position:fixed;left:12px;right:12px;bottom:96px;z-index:2000;background:#f3ead6;color:#14100c;padding:12px;border-radius:11px;font-weight:700;display:none;box-shadow:0 8px 30px #000}
+.actions button{padding:10px 12px;font-size:13px;min-height:48px;width:auto}
+.toast{position:fixed;left:12px;right:12px;bottom:calc(104px + env(safe-area-inset-bottom));z-index:2000;background:#f3ead6;color:#14100c;padding:12px;border-radius:11px;font-weight:700;display:none;box-shadow:0 8px 30px #000;max-width:536px;margin-left:auto;margin-right:auto}
 a{color:#e8c877}
-.bottomnav{position:fixed;left:0;right:0;bottom:0;z-index:1500;display:flex;background:#1d1710;border-top:1px solid #3a2c18;padding-bottom:env(safe-area-inset-bottom)}
+.bottomnav{position:fixed;left:0;right:0;bottom:0;z-index:1500;display:flex;background:rgba(29,23,16,.94);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border-top:1px solid #3a2c18;padding-bottom:env(safe-area-inset-bottom)}
 .bottomnav button{flex:1;background:transparent;color:#b8a888;border:0;border-radius:0;font-size:13px;min-height:70px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
 .bottomnav button .ic{font-size:24px}
 .bottomnav button.on{color:#e8c877;background:#2a2114;box-shadow:inset 0 3px 0 #d9a441}
+.bottomnav button:active{background:#2a2114}
 .topbtns{display:flex;gap:8px;margin-top:8px}
 .topbtns button{min-height:44px;font-size:14px;padding:8px}
 .grouph{font-size:15px;color:#e8c877;margin:18px 0 8px;font-weight:800;text-transform:capitalize}
 .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
 .grid img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;cursor:pointer}
-.fab{position:fixed;right:16px;bottom:92px;z-index:1700;width:64px;height:64px;min-height:64px;border-radius:50%;font-size:28px;padding:0;box-shadow:0 8px 24px #000;display:none;align-items:center;justify-content:center}
-#lightbox{display:none;position:fixed;inset:0;z-index:2500;background:rgba(8,6,4,.96);padding:16px;overflow-y:auto}
+.fab{position:fixed;right:calc(16px + env(safe-area-inset-right));bottom:calc(100px + env(safe-area-inset-bottom));z-index:1700;width:64px;height:64px;min-height:64px;border-radius:50%;font-size:28px;padding:0;box-shadow:0 8px 24px #000;display:none;align-items:center;justify-content:center}
+#lightbox{display:none;position:fixed;inset:0;z-index:2500;background:rgba(8,6,4,.96);padding:calc(16px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom));overflow-y:auto}
 #lightbox img{width:100%;max-height:60vh;object-fit:contain;border-radius:10px}
 #lightbox .t{font-weight:800;font-size:20px;margin-top:10px}
 #lightbox .n{font-size:15px;color:#e8ddc4;margin-top:4px}
@@ -60,7 +62,8 @@ a{color:#e8c877}
 .bal .v{font-size:22px;font-weight:800}
 .bal .pos{color:#7fb069}.bal .neg{color:#c95d63}.bal .zero{color:#b8a888}
 .acc{border:1px solid #3a2c18;border-radius:12px;margin-top:10px;background:#181209}
-.acc summary{list-style:none;cursor:pointer;padding:14px;font-size:16px;font-weight:800;color:#e8c877;display:flex;justify-content:space-between;align-items:center;min-height:52px}
+.acc summary{list-style:none;cursor:pointer;padding:14px;font-size:16px;font-weight:800;color:#e8c877;display:flex;justify-content:space-between;align-items:center;min-height:56px;touch-action:manipulation}
+.acc summary:active{background:#221a0e}
 .acc summary::-webkit-details-marker{display:none}
 .acc summary::after{content:'▸';font-size:20px;color:#b8a888}
 .acc[open] summary::after{content:'▾'}
@@ -74,9 +77,22 @@ a{color:#e8c877}
 .avatar.off{background:#3a2c18;color:#b8a888}
 .durchips button.on{background:#7fb069;color:#14100c}
 .cards .place img,#pPreview{width:100%;max-height:220px;object-fit:cover;border-radius:9px;margin-top:8px}
+.wrap img{max-width:100%}
+.row>*{min-width:0}
+#loadbar{position:fixed;top:0;left:0;height:3px;width:0;background:#d9a441;z-index:3000;opacity:0;transition:width .3s ease,opacity .3s ease;box-shadow:0 0 8px #d9a441;pointer-events:none}
+.catchips button:active{transform:scale(.94)}
+.expense>div:first-child,.bal>div:first-child{min-width:0}
+.expense>div:first-child>b,.bal>div:first-child>b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.expense .amt{flex:0 0 auto;margin-left:10px}
+.memberrow>div:nth-child(2){min-width:0}
+.memberrow b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.settle b{overflow-wrap:anywhere}
+.empty{display:flex;flex-direction:column;align-items:center;gap:8px;padding:28px 16px;text-align:center;color:#b8a888}
+.empty .big{font-size:40px}
 </style>
 </head>
 <body>
+<div id="loadbar"></div>
 <div class="topbar">
   <div class="brand">📖 Diario de viaje</div>
   <div id="hdrTrip" class="tripname" style="display:none"></div>
@@ -223,6 +239,11 @@ function loadJson(k,d){ try{ const v=JSON.parse(localStorage.getItem(k)); return
 function deviceId(){ let d=localStorage.getItem(DEV_KEY); if(!d){ d='dev-'+Math.random().toString(36).slice(2)+Date.now().toString(36); localStorage.setItem(DEV_KEY,d); } return d; }
 function isOrganizer(){ return !!(session && session.role==='organizer'); }
 function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.style.display='block'; setTimeout(()=>t.style.display='none',3600); }
+/* Indicador discreto de carga: barra fina dorada arriba */
+let loadN=0;
+function loadStart(){ loadN++; const b=document.getElementById('loadbar'); if(!b) return; b.style.opacity='1'; b.style.width='72%'; }
+function loadDone(){ loadN=Math.max(0,loadN-1); if(loadN) return; const b=document.getElementById('loadbar'); if(!b) return; b.style.width='100%'; setTimeout(()=>{ b.style.opacity='0'; b.style.width='0'; },280); }
+async function saving(btn,fn){ if(btn) btn.disabled=true; loadStart(); try{ return await fn(); } finally{ if(btn) btn.disabled=false; loadDone(); } }
 function esc(s){ return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function fmtEuro(cents){ return (cents/100).toFixed(2).replace('.',',')+' €'; }
 function parseAmt(v){ v=String(v||'').trim().replace(/\./g,'').replace(',','.'); return parseFloat(v)||0; }
@@ -270,6 +291,7 @@ function showTab(name){
   const fab=document.getElementById('btnFabCam');
   if(fab) fab.style.display=(session && name==='diario')?'flex':'none';
   window.scrollTo({top:0,behavior:'smooth'});
+  loadStart(); setTimeout(loadDone,320);
 }
 document.querySelectorAll('#bottomNav button').forEach(b=>b.addEventListener('click',()=>{
   if(!session){ showTab('start'); toast('Primero crea tu viaje o únete con el código.'); return; }
@@ -313,7 +335,7 @@ function dayLabel(iso){ const d=new Date(iso); return DIAS[d.getDay()]+' '+d.get
 function renderDiary(){
   const box=document.getElementById('days');
   const places=(serverState && serverState.places)||[];
-  if(!places.length){ box.innerHTML='<div class="card">Aún no hay fotos. Sé el primero 📸</div>'; return; }
+  if(!places.length){ box.innerHTML='<div class="card empty"><div class="big">📸</div><div><b>Aún no hay fotos</b><br>Sé el primero del viaje en subir una.</div></div>'; return; }
   const groups={};
   places.slice().sort((a,b)=>new Date(a.createdAt)-new Date(b.createdAt)).forEach(p=>{ const k=dayKey(p.createdAt); (groups[k]=groups[k]||[]).push(p); });
   const keys=Object.keys(groups).sort();
@@ -361,7 +383,7 @@ function openPhotoForm(withCamera){
 }
 document.getElementById('btnTogglePhotoForm').onclick=()=>{ const w=document.getElementById('photoFormWrap'); const open=w.style.display!=='none'; if(open){ w.style.display='none'; document.getElementById('btnTogglePhotoForm').textContent='📸 Añadir foto'; } else openPhotoForm(false); };
 document.getElementById('btnFabCam').onclick=()=>openPhotoForm(true);
-document.getElementById('btnPlace').onclick=async()=>{
+document.getElementById('btnPlace').onclick=()=>{ saving(document.getElementById('btnPlace'),async()=>{
   if(!session){ showTab('start'); return; }
   const title=document.getElementById('pTitle').value.trim()||'Foto';
   let lat=null,lng=null;
@@ -373,7 +395,7 @@ document.getElementById('btnPlace').onclick=async()=>{
     document.getElementById('photoFormWrap').style.display='none'; document.getElementById('btnTogglePhotoForm').textContent='📸 Añadir foto';
     await refreshState(true); toast('Guardado en el diario 📸');
   }catch(e){ toast('Error: '+e.message); }
-};
+}); };
 
 /* GASTOS */
 /* BOTE COMUN */
@@ -394,7 +416,7 @@ function renderPot(){
     });
     return;
   }
-  const headHtml='<b>🫙 Bote: '+esc(pot.treasurer)+'</b><div class="mini">aportado '+esc(pot.contributed)+' · gastado del bote '+esc(pot.spentFromPot)+' · quedan <b>'+esc(pot.remaining)+'</b></div>';
+  const headHtml='<b>🫙 Bote: '+esc(pot.treasurer)+'</b><div class="mini">aportado '+esc(pot.contributed)+' · gastado del bote '+esc(pot.spentFromPot)+' · <span style="white-space:nowrap">quedan <b>'+esc(pot.remaining)+'</b></span></div>';
   box.innerHTML='<div class="card" style="border-color:#d9a441">'+headHtml
     +((pot.pendingCents||0)>0?'<div class="mini" style="color:#d9a441">＋'+esc(fmtEuro(pot.pendingCents))+' pendientes de confirmar</div>':'')
     +(((pot.pendingList)||[]).some(p=>session&&p.nickname===session.nickname)?'<div class="mini">⏳ Tu aportación está pendiente de que '+esc(pot.treasurer)+' la confirme.</div>':'')
@@ -408,7 +430,7 @@ function renderPot(){
   document.getElementById('btnPotContrib').onclick=()=>{
     const w=document.getElementById('potContribWrap'); w.style.display=(w.style.display==='none')?'block':'none';
   };
-  document.getElementById('btnPotGo').onclick=async()=>{
+  document.getElementById('btnPotGo').onclick=()=>{ saving(document.getElementById('btnPotGo'),async()=>{
     const amount=parseAmt(document.getElementById('potAmount').value);
     if(amount<=0){ toast('Pon el importe.'); return; }
     try{
@@ -416,7 +438,7 @@ function renderPot(){
       document.getElementById('potAmount').value=''; document.getElementById('potContribWrap').style.display='none';
       await refreshState(true); toast('Aportación enviada 🫙 El bote la confirma.');
     }catch(e){ toast('Error: '+e.message); }
-  };
+  }); };
   /* La tesorera apunta la aportación de un compañero sin móvil: ya confirmada */
   var potForNick=null;
   const btnFor=document.getElementById('btnPotForOther');
@@ -426,7 +448,7 @@ function renderPot(){
       document.querySelectorAll('#potForChips button').forEach(x=>x.classList.remove('on'));
       b.classList.add('on'); potForNick=b.dataset.n;
     });
-    document.getElementById('btnPotForGo').onclick=async()=>{
+    document.getElementById('btnPotForGo').onclick=()=>{ saving(document.getElementById('btnPotForGo'),async()=>{
       const amount=parseAmt(document.getElementById('potForAmount').value);
       if(!potForNick){ toast('Elige al compañero.'); return; }
       if(amount<=0){ toast('Pon el importe.'); return; }
@@ -435,7 +457,7 @@ function renderPot(){
         document.getElementById('potForAmount').value=''; document.getElementById('potForWrap').style.display='none';
         await refreshState(true); toast('Aportación de '+potForNick+' apuntada ✔');
       }catch(e){ toast('Error: '+e.message); }
-    };
+    }); };
   }
 }
 /* Aportaciones pendientes: solo el tesorero confirma/rechaza */
@@ -450,14 +472,14 @@ function renderPendingList(){
     +'</div>').join('');
   return h;
 }
-window.confirmContrib=async(id,ok)=>{
+window.confirmContrib=(id,ok)=>{ saving(null,async()=>{
   if(!session) return;
   if(!ok && !confirm('¿Rechazar esta aportación? Desaparecerá de las cuentas.')) return;
   try{
     await api('/api/trips/'+session.tripId+'/pot/contributions/'+id+'/confirm',{method:'POST',body:{ok:ok}});
     await refreshState(true); toast(ok?'Aportación confirmada ✔':'Aportación rechazada.');
   }catch(e){ toast('Error: '+e.message); }
-};
+}); };
 function members(){ return (serverState && serverState.members)||[]; }
 function splitPreview(){
   const total=parseAmt(document.getElementById('eAmount').value);
@@ -561,7 +583,7 @@ function renderExpenses(){
 }
 document.getElementById('btnToggleExpForm').onclick=()=>{ const w=document.getElementById('expFormWrap'); const open=w.style.display!=='none'; if(open){ w.style.display='none'; document.getElementById('btnToggleExpForm').textContent='＋ Añadir gasto'; } else { w.style.display='block'; document.getElementById('btnToggleExpForm').textContent='Cerrar'; renderExpenses(); splitPreview(); } };
 document.getElementById('eAmount').addEventListener('input',splitPreview);
-document.getElementById('btnExpense').onclick=async()=>{
+document.getElementById('btnExpense').onclick=()=>{ saving(document.getElementById('btnExpense'),async()=>{
   if(!session){ showTab('start'); return; }
   const amount=parseAmt(document.getElementById('eAmount').value);
   if(amount<=0){ toast('Pon el importe.'); return; }
@@ -595,9 +617,9 @@ document.getElementById('btnExpense').onclick=async()=>{
     document.getElementById('expFormWrap').style.display='none'; document.getElementById('btnToggleExpForm').textContent='＋ Añadir gasto';
     await refreshState(true); toast('Gasto guardado 💶');
   }catch(e){ toast('Error: '+e.message); }
-};
+}); };
 window.delExpense=id=>{ if(!session) return; if(!confirm('¿Eliminar este gasto?')) return; (async()=>{ try{ const r=await fetch('/api/expenses/'+id,{method:'DELETE',headers:{'X-Member-Token':session.memberToken}}); if(!r.ok){ const d=await r.json().catch(()=>({})); throw new Error(d.error||'Error '+r.status); } await refreshState(true); toast('Gasto eliminado.'); }catch(e){ toast('Error: '+e.message); } })(); };
-document.getElementById('btnSettle').onclick=async()=>{
+document.getElementById('btnSettle').onclick=()=>{ saving(document.getElementById('btnSettle'),async()=>{
   const frm=document.getElementById('sFrom').value, to=document.getElementById('sTo').value;
   const amount=parseAmt(document.getElementById('sAmount').value);
   if(amount<=0){ toast('Pon el importe del pago.'); return; }
@@ -606,7 +628,7 @@ document.getElementById('btnSettle').onclick=async()=>{
     document.getElementById('sAmount').value='';
     await refreshState(true); toast('Pago registrado ✔');
   }catch(e){ toast('Error: '+e.message); }
-};
+}); };
 
 /* DONDE ESTAMOS */
 function renderWhere(){
@@ -661,7 +683,7 @@ function setSessionFromResponse(d, nickname){
   localStorage.setItem(SES_KEY,JSON.stringify(session));
   expPayer=session.nickname;
 }
-document.getElementById('btnCreate').onclick=async()=>{
+document.getElementById('btnCreate').onclick=()=>{ saving(document.getElementById('btnCreate'),async()=>{
   const name=document.getElementById('tName').value.trim(); const nick=document.getElementById('tNick').value.trim();
   if(!name){ toast('Pon un nombre al viaje.'); return; }
   if(!nick){ toast('Pon tu apodo (así te verá el grupo).'); return; }
@@ -672,8 +694,8 @@ document.getElementById('btnCreate').onclick=async()=>{
     toast('Viaje creado. Código '+session.inviteCode+' — compártelo solo con tu grupo.');
     showTab('diario');
   }catch(e){ document.getElementById('serverError').style.display='block'; toast('Error al crear: '+e.message); }
-};
-document.getElementById('btnJoin').onclick=async()=>{
+}); };
+document.getElementById('btnJoin').onclick=()=>{ saving(document.getElementById('btnJoin'),async()=>{
   const code=document.getElementById('jCode').value.trim().toUpperCase(); const nick=document.getElementById('jNick').value.trim();
   if(!code){ toast('Pon el código del viaje.'); return; }
   if(!nick){ toast('Pon tu apodo (así te verá el grupo).'); return; }
@@ -684,7 +706,7 @@ document.getElementById('btnJoin').onclick=async()=>{
     toast('Dentro: '+d.trip.name+'.');
     showTab('diario');
   }catch(e){ toast(e.status===404?'Ese código no existe. Revísalo con quien te lo pasó.':'Error al unirse: '+e.message); }
-};
+}); };
 document.getElementById('btnLeave').onclick=()=>{ if(confirm('¿Salir de este viaje en este móvil? El viaje seguirá en el servidor para el grupo.')){ setSharing(false); session=null; localStorage.removeItem(SES_KEY); serverState=null; redraw(); showTab('start'); toast('Has salido del viaje en este móvil.'); } };
 
 /* COMPARTIR INVITACION (?join=CODIGO) */

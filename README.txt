@@ -84,3 +84,13 @@ PRUEBA EN 3 MINUTOS (dos móviles)
 5. B registra el pago B→Ana 30 €. Los balances quedan a 0.
 6. A activa "Compartir mi ubicación" 15 min. B le ve en el mapa.
    A lo apaga: B ve "no comparte ubicación".
+
+PULIDO MOVIL (caché v12)
+-----------------------
+- viewport-fit=cover + safe-areas en cabecera, navegación inferior, FAB y toast.
+- Inputs/selects a 16px (iOS no hace zoom), botones/chips/acordeones >=48px,
+  feedback táctil :active y touch-action:manipulation (sin doble-tap zoom).
+- Contenido centrado a 560px, rejilla del Diario 3 columnas, importes grandes,
+  truncado elegante de títulos largos, sin scroll horizontal.
+- Barra fina de carga al cambiar de pestaña o guardar; estado vacío amable
+  en el Diario; navegación inferior con blur y activo claro.
