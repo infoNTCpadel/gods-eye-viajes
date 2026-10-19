@@ -333,22 +333,39 @@ const DIAS=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'
 const MESES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
 function dayKey(iso){ const d=new Date(iso); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function dayLabel(iso){ const d=new Date(iso); return DIAS[d.getDay()]+' '+d.getDate()+' '+MESES[d.getMonth()]; }
+let diaryFilter=null; /* apodo filtrado en el Diario, null = todos */
 function renderDiary(){
   const box=document.getElementById('days');
   const places=(serverState && serverState.places)||[];
-  if(!places.length){ box.innerHTML='<div class="card empty"><div class="big">📸</div><div><b>Aún no hay fotos</b><br>Sé el primero del viaje en subir una.</div></div>'; return; }
+  const authOf=p=>((p.author||'').trim()||'?');
+  if(!places.length){ diaryFilter=null; box.innerHTML='<div class="card empty"><div class="big">📸</div><div><b>Aún no hay fotos</b><br>Sé el primero del viaje en subir una.</div></div>'; return; }
   const byA={};
-  places.forEach(p=>{ const a=(p.author||'').trim()||'?'; byA[a]=(byA[a]||0)+1; });
-  const head='<div class="grouph" style="margin-top:0">📸 '+places.length+' foto'+(places.length>1?'s':'')+' en total</div>'
-    +'<div class="mini" style="margin:-4px 0 8px">'+Object.keys(byA).map(a=>esc(a)+' '+byA[a]).join(' · ')+'</div>';
-  const groups={};
-  places.slice().sort((a,b)=>new Date(a.createdAt)-new Date(b.createdAt)).forEach(p=>{ const k=dayKey(p.createdAt); (groups[k]=groups[k]||[]).push(p); });
-  const keys=Object.keys(groups).sort();
-  box.innerHTML=head+keys.map(k=>{
-    const ps=groups[k];
-    return '<div class="grouph">'+esc(dayLabel(ps[0].createdAt))+' · '+ps.length+' foto'+(ps.length>1?'s':'')+'</div><div class="grid">'+
-      ps.map(p=>'<img loading="lazy" src="'+esc(p.photoUrl||'icon.svg')+'" onclick="openLb(\''+p.id+'\')" alt="">').join('')+'</div>';
-  }).join('');
+  places.forEach(p=>{ const a=authOf(p); byA[a]=(byA[a]||0)+1; });
+  const authors=Object.keys(byA).sort((x,y)=>(byA[y]-byA[x])||x.localeCompare(y));
+  const chips='<div class="catchips" style="margin:0 0 10px">'
+    +'<button type="button" data-f="" class="'+(diaryFilter?'':'on')+'">Todos ('+places.length+')</button>'
+    +authors.map(a=>'<button type="button" data-f="'+esc(a)+'" class="'+(diaryFilter===a?'on':'')+'">'+esc(a)+' ('+byA[a]+')</button>').join('')
+    +'</div>';
+  const list=diaryFilter?places.filter(p=>authOf(p)===diaryFilter):places;
+  const head='<div class="grouph" style="margin-top:0">📸 '+list.length+' foto'+(list.length>1?'s':'')
+    +(diaryFilter?' de '+esc(diaryFilter):' en total')+'</div>';
+  if(!list.length){
+    box.innerHTML=chips+head+'<div class="card empty"><div class="big">📸</div><div><b>Sin fotos de '+esc(diaryFilter||'')+'</b><br>Prueba con otro filtro.</div></div>';
+  }else{
+    const groups={};
+    list.slice().sort((a,b)=>new Date(a.createdAt)-new Date(b.createdAt)).forEach(p=>{ const k=dayKey(p.createdAt); (groups[k]=groups[k]||[]).push(p); });
+    const keys=Object.keys(groups).sort();
+    box.innerHTML=chips+head+keys.map(k=>{
+      const ps=groups[k];
+      return '<div class="grouph">'+esc(dayLabel(ps[0].createdAt))+' · '+ps.length+' foto'+(ps.length>1?'s':'')+'</div><div class="grid">'+
+        ps.map(p=>'<img loading="lazy" src="'+esc(p.photoUrl||'icon.svg')+'" onclick="openLb(\''+p.id+'\')" alt="">').join('')+'</div>';
+    }).join('');
+  }
+  box.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>{
+    const f=b.getAttribute('data-f');
+    diaryFilter=(f===''||f===diaryFilter)?null:f;
+    renderDiary();
+  });
 }
 window.openLb=id=>{
   const p=(serverState.places||[]).find(x=>x.id===id); if(!p) return;
