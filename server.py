@@ -91,7 +91,7 @@ def init_db():
             CREATE TABLE IF NOT EXISTS itinerary_items(
               id TEXT PRIMARY KEY, trip_id TEXT NOT NULL REFERENCES trips(id),
               day TEXT DEFAULT '', time TEXT DEFAULT '', title TEXT NOT NULL,
-              note TEXT DEFAULT '', sort INTEGER DEFAULT 0, created_at TEXT NOT NULL);
+              note TEXT DEFAULT '', kind TEXT DEFAULT '', sort INTEGER DEFAULT 0, created_at TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS pot_requests(
               id TEXT PRIMARY KEY, trip_id TEXT NOT NULL REFERENCES trips(id),
               created_by TEXT DEFAULT '', amount_cents INTEGER NOT NULL,
@@ -113,6 +113,12 @@ def init_db():
         for _col, _typ in (("destination", "TEXT DEFAULT ''"), ("itinerary_updated_at", "TEXT DEFAULT ''")):
             if _col not in tcols:
                 c.execute("ALTER TABLE trips ADD COLUMN %s %s" % (_col, _typ))
+        try:
+            icols = {r["name"] for r in c.execute("PRAGMA table_info(itinerary_items)")}
+            if "kind" not in icols:
+                c.execute("ALTER TABLE itinerary_items ADD COLUMN kind TEXT DEFAULT ''")
+        except Exception:
+            pass
         if "treasurer_member_id" not in tcols:
             c.execute("ALTER TABLE trips ADD COLUMN treasurer_member_id TEXT DEFAULT ''")
         scols = {r["name"] for r in c.execute("PRAGMA table_info(settlements)")}
@@ -217,8 +223,10 @@ def place_public(r):
 
 
 def itinerary_public(r):
+    keys = r.keys() if hasattr(r, "keys") else []
     return {"id": r["id"], "day": r["day"] or "", "time": r["time"] or "",
             "title": r["title"] or "", "note": r["note"] or "",
+            "kind": (r["kind"] if "kind" in keys and r["kind"] else "") or "",
             "createdAt": r["created_at"]}
 
 
@@ -653,10 +661,11 @@ class H(BaseHTTPRequestHandler):
             iid = uuid.uuid4().hex
             mx = c.execute("SELECT COALESCE(MAX(sort),0) FROM itinerary_items WHERE trip_id=?", (trip_id,)).fetchone()[0]
             c.execute(
-                "INSERT INTO itinerary_items(id,trip_id,day,time,title,note,sort,created_at) VALUES(?,?,?,?,?,?,?,?)",
+                "INSERT INTO itinerary_items(id,trip_id,day,time,title,note,kind,sort,created_at) VALUES(?,?,?,?,?,?,?,?,?)",
                 (iid, trip_id, clean_str(b.get("day"), 40, "day"),
                  clean_str(b.get("time"), 5, "time"), title,
-                 clean_str(b.get("note"), 300, "note"), (mx or 0) + 1, now_iso()))
+                 clean_str(b.get("note"), 300, "note"), clean_str(b.get("kind"), 20, "kind"),
+                 (mx or 0) + 1, now_iso()))
             self._bump_itinerary(c, trip_id)
             r = c.execute("SELECT * FROM itinerary_items WHERE id=?", (iid,)).fetchone()
         self.send_json(201, {"ok": True, "item": itinerary_public(r)})
@@ -673,11 +682,12 @@ class H(BaseHTTPRequestHandler):
             r0 = c.execute("SELECT * FROM itinerary_items WHERE id=? AND trip_id=?", (item_id, trip_id)).fetchone()
             if not r0:
                 return self.err(404, "punto no existe")
-            c.execute("UPDATE itinerary_items SET day=?, time=?, title=?, note=? WHERE id=?",
+            c.execute("UPDATE itinerary_items SET day=?, time=?, title=?, note=?, kind=? WHERE id=?",
                       (clean_str(b.get("day"), 40, "day") or r0["day"],
                        clean_str(b.get("time"), 5, "time") or r0["time"],
                        clean_str(b.get("title"), 90, "title") or r0["title"],
                        clean_str(b.get("note"), 300, "note") if b.get("note") is not None else r0["note"],
+                       clean_str(b.get("kind"), 20, "kind") if b.get("kind") is not None else (r0["kind"] if "kind" in r0.keys() else ""),
                        item_id))
             self._bump_itinerary(c, trip_id)
             r = c.execute("SELECT * FROM itinerary_items WHERE id=?", (item_id,)).fetchone()

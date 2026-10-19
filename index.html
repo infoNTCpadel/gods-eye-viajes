@@ -207,16 +207,18 @@ a{color:#e8c877}
     <h2>Itinerario</h2>
     <div id="itinContext"></div>
     <div id="itinBanner" class="card" style="display:none;border-color:#d9a441"><b>🆕 El itinerario se actualizó.</b><div class="mini">Quien creó el viaje cambió el plan.</div></div>
+    <div id="itinDayTabs" class="catchips" style="margin:0 0 4px"></div>
     <div id="itinList"></div>
     <div class="card" id="itinFormCard" style="display:none">
-      <label>Añadir al itinerario (solo tú, que creaste el viaje)</label>
+      <label id="itinFormTitle">Añadir al itinerario (solo tú, que creaste el viaje)</label>
+      <div class="catchips" id="itinKindChips" style="margin-top:8px"></div>
       <div class="row" style="margin-top:8px">
         <div><label>Día<input id="itinDay" type="date"></label></div>
         <div><label>Hora<input id="itinTime" type="time"></label></div>
       </div>
       <label>Título<input id="itinTitle" placeholder="Visita a la bodega"></label>
       <label>Nota (opcional)<input id="itinNote" placeholder="Llevar bañador…"></label>
-      <div class="row"><button id="btnItinAdd">＋ Añadir</button></div>
+      <div class="row"><button id="btnItinAdd">＋ Añadir</button><button id="btnItinCancel" class="sec" style="display:none">Cancelar</button></div>
     </div>
   </section>
 
@@ -540,29 +542,53 @@ document.getElementById('btnSettle').onclick=()=>{ saving(document.getElementByI
 }); };
 
 /* ITINERARIO (lo rellena quien creó el viaje; el resto lo ve) */
+const ITIN_KINDS=[['punto','📸 Punto'],['ciudad','🏙️ Ciudad'],['pueblo','🏘️ Pueblo'],['hotel','🏨 Hotel'],['restaurante','🍽️ Comer'],['otro','📌 Otro']];
+function itinKindEmoji(k){ const f=ITIN_KINDS.find(x=>x[0]===k); return f?f[1].split(' ')[0]:'📸'; }
+let itinKind='punto', itinSelDay=null, itinWeek=0, itinEditId=null;
 function itinSeenKey(){ return 'itinSeen_'+(session?session.tripId:''); }
+function shortDay(d){ const dt=new Date(d+'T12:00:00'); return ['dom','lun','mar','mié','jue','vie','sáb'][dt.getDay()]+' '+dt.getDate(); }
+function renderItinKindChips(){
+  const box=document.getElementById('itinKindChips'); if(!box) return;
+  box.innerHTML=ITIN_KINDS.map(k=>'<button type="button" data-k="'+k[0]+'" class="'+(k[0]===itinKind?'on':'')+'">'+k[1]+'</button>').join('');
+  box.querySelectorAll('button').forEach(b=>b.onclick=()=>{ itinKind=b.dataset.k; renderItinKindChips(); });
+}
 function renderItinerary(){
   const box=document.getElementById('itinList'); if(!box) return;
   const it=(serverState && serverState.itinerary)||{items:[]};
   const items=it.items||[];
   const org=isOrganizer();
   document.getElementById('itinFormCard').style.display=org?'block':'none';
+  renderItinKindChips();
   const key=itinSeenKey(), seen=localStorage.getItem(key);
   if(!seen && it.updatedAt) localStorage.setItem(key,it.updatedAt);
   const changed=!!(it.updatedAt && seen && it.updatedAt>seen && !org);
   document.getElementById('itinDot').style.display=changed?'inline':'none';
   document.getElementById('itinBanner').style.display=changed?'block':'none';
-  if(!items.length){
+  const tabsBox=document.getElementById('itinDayTabs');
+  const days=[...new Set(items.map(x=>x.day))].sort();
+  if(!days.length){
+    tabsBox.innerHTML='';
     box.innerHTML='<div class="card empty"><div class="big">📋</div><div>'+(org?'<b>Aún no hay plan</b><br>Añade abajo el primer punto del viaje.':'<b>Aún no hay plan</b><br>Quien creó el viaje lo está preparando.')+'</div></div>';
-  }else{
-    const groups={}, order=[];
-    items.forEach(x=>{ if(!(x.day in groups)){ groups[x.day]=[]; order.push(x.day); } groups[x.day].push(x); });
-    box.innerHTML=order.map(d=>'<div class="grouph">'+esc(dayLabel(d+'T12:00:00'))+'</div>'+groups[d].map(x=>
-      '<div class="expense"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>'+(x.time?esc(x.time)+' · ':'')+esc(x.title)+'</b>'
-      +(org?'<button class="sec" style="width:auto;min-height:0;padding:8px 14px;flex:0 0 auto" onclick="delItin(\''+x.id+'\')">✕</button>':'')
-      +'</div>'+(x.note?'<div class="mini" style="margin-top:4px">'+esc(x.note)+'</div>':'')+'</div>'
-    ).join('')).join('');
+    loadContext(); return;
   }
+  const weeks=Math.ceil(days.length/7);
+  itinWeek=Math.max(0,Math.min(itinWeek,weeks-1));
+  const wdays=days.slice(itinWeek*7,itinWeek*7+7);
+  if(!itinSelDay||!wdays.includes(itinSelDay)) itinSelDay=wdays[0];
+  let tabs='';
+  if(weeks>1) tabs+='<button type="button" id="itinPrevW" class="sec"'+(itinWeek===0?' disabled style="opacity:.35"':'')+'>‹</button>';
+  tabs+=wdays.map(d=>'<button type="button" data-d="'+esc(d)+'" class="'+(d===itinSelDay?'on':'')+'">'+esc(shortDay(d))+'</button>').join('');
+  if(weeks>1) tabs+='<button type="button" id="itinNextW" class="sec"'+(itinWeek>=weeks-1?' disabled style="opacity:.35"':'')+'>›</button>';
+  tabsBox.innerHTML=tabs;
+  tabsBox.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>{ itinSelDay=b.dataset.d; renderItinerary(); });
+  const pw=document.getElementById('itinPrevW'); if(pw&&itinWeek>0) pw.onclick=()=>{ itinWeek--; renderItinerary(); };
+  const nw=document.getElementById('itinNextW'); if(nw&&itinWeek<weeks-1) nw.onclick=()=>{ itinWeek++; renderItinerary(); };
+  const list=items.filter(x=>x.day===itinSelDay);
+  box.innerHTML='<div class="grouph">'+esc(dayLabel(itinSelDay+'T12:00:00'))+'</div>'+list.map(x=>
+    '<div class="expense"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>'+itinKindEmoji(x.kind)+' '+(x.time?esc(x.time)+' · ':'')+esc(x.title)+'</b>'
+    +(org?'<span style="flex:0 0 auto;white-space:nowrap"><button class="sec" style="width:auto;min-height:0;padding:8px 12px" onclick="editItin(\''+x.id+'\')">✏️</button> <button class="sec" style="width:auto;min-height:0;padding:8px 12px" onclick="delItin(\''+x.id+'\')">✕</button></span>':'')
+    +'</div>'+(x.note?'<div class="mini" style="margin-top:4px">'+esc(x.note)+'</div>':'')+'</div>'
+  ).join('');
   loadContext();
 }
 function markItinSeen(){
@@ -571,16 +597,40 @@ function markItinSeen(){
   const d=document.getElementById('itinDot'); if(d) d.style.display='none';
   const b=document.getElementById('itinBanner'); if(b) b.style.display='none';
 }
+function itinCancelEdit(){
+  itinEditId=null; itinKind='punto';
+  document.getElementById('itinTitle').value=''; document.getElementById('itinNote').value='';
+  document.getElementById('btnItinAdd').textContent='＋ Añadir';
+  document.getElementById('btnItinCancel').style.display='none';
+  document.getElementById('itinFormTitle').textContent='Añadir al itinerario (solo tú, que creaste el viaje)';
+  renderItinKindChips();
+}
+document.getElementById('btnItinCancel').onclick=()=>itinCancelEdit();
+window.editItin=id=>{
+  const p=((serverState&&serverState.itinerary||{}).items||[]).find(x=>x.id===id); if(!p) return;
+  itinEditId=id; itinKind=p.kind||'punto';
+  document.getElementById('itinDay').value=p.day||'';
+  document.getElementById('itinTime').value=p.time||'';
+  document.getElementById('itinTitle').value=p.title||'';
+  document.getElementById('itinNote').value=p.note||'';
+  document.getElementById('btnItinAdd').textContent='Guardar cambios';
+  document.getElementById('btnItinCancel').style.display='block';
+  document.getElementById('itinFormTitle').textContent='Editar punto del itinerario';
+  renderItinKindChips();
+  document.getElementById('itinFormCard').scrollIntoView({behavior:'smooth',block:'center'});
+};
 document.getElementById('btnItinAdd').onclick=()=>{ saving(document.getElementById('btnItinAdd'),async()=>{
   if(!session) return;
   const day=document.getElementById('itinDay').value, time=document.getElementById('itinTime').value;
   const title=document.getElementById('itinTitle').value.trim();
   if(!day){ toast('Elige el día.'); return; }
   if(!title){ toast('Pon un título.'); return; }
+  const body={day:day,time:time,title:title,note:document.getElementById('itinNote').value.trim(),kind:itinKind};
   try{
-    await api('/api/trips/'+session.tripId+'/itinerary',{method:'POST',body:{day:day,time:time,title:title,note:document.getElementById('itinNote').value.trim()}});
-    document.getElementById('itinTitle').value=''; document.getElementById('itinNote').value='';
-    await refreshState(true); markItinSeen(); toast('Añadido al itinerario 📋');
+    if(itinEditId) await api('/api/trips/'+session.tripId+'/itinerary/'+itinEditId,{method:'POST',body:body});
+    else await api('/api/trips/'+session.tripId+'/itinerary',{method:'POST',body:body});
+    itinCancelEdit();
+    await refreshState(true); markItinSeen(); toast(itinEditId?'Cambios guardados 📋':'Añadido al itinerario 📋');
   }catch(e){ toast('Error: '+e.message); }
 }); };
 window.delItin=id=>{ if(!session) return; if(!confirm('¿Quitar este punto del itinerario?')) return;
