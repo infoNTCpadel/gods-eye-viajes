@@ -23,6 +23,7 @@ LOCK = threading.Lock()
 CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # sin 0/O/1/I
 MAX_BODY = 64 * 1024
 MAX_BODY_PLACE = 2500 * 1024
+POT_NICK = "🫙 Bote"  # el bote es su propia cuenta, no cuelga del saldo del tesorero
 PHOTOS_DIR = os.path.join(DATA_DIR, "photos")
 STATIC = {
     "/": ("index.html", "text/html; charset=utf-8"),
@@ -109,6 +110,16 @@ def init_db():
         scols = {r["name"] for r in c.execute("PRAGMA table_info(settlements)")}
         if "request_id" not in scols:
             c.execute("ALTER TABLE settlements ADD COLUMN request_id TEXT DEFAULT ''")
+        # El bote es su propia cuenta: las aportaciones van a "🫙 Bote" (no al tesorero)
+        # y los gastos del bote los paga "🫙 Bote". Migra datos de versiones anteriores.
+        try:
+            for r in c.execute("SELECT id, amount_cents FROM expenses WHERE kind='contribution'"):
+                c.execute("UPDATE expenses SET participants_json=? WHERE id=?",
+                          (json.dumps([{"nickname": POT_NICK, "cents": r["amount_cents"]}],
+                                      ensure_ascii=False), r["id"]))
+            c.execute("UPDATE expenses SET payer_nickname=? WHERE from_pot=1", (POT_NICK,))
+        except Exception:
+            pass
 
 
 def new_code(c):
@@ -252,6 +263,24 @@ def settled_expenses(expenses):
     return [e for e in expenses if e["kind"] != "contribution" or e["status"] == "confirmed"]
 
 
+def pot_remaining(c, trip_id):
+    """Lo que queda en caja: aportaciones confirmadas − gastos del bote
+    − salidas manuales del bote + entradas manuales al bote.
+    Equivale a -(balance contable de 🫙 Bote), siempre >= 0 en uso normal."""
+    r = c.execute(
+        """SELECT
+           (SELECT COALESCE(SUM(amount_cents),0) FROM expenses
+             WHERE trip_id=? AND kind='contribution' AND status='confirmed')
+           - (SELECT COALESCE(SUM(amount_cents),0) FROM expenses
+             WHERE trip_id=? AND from_pot=1)
+           - (SELECT COALESCE(SUM(amount_cents),0) FROM settlements
+             WHERE trip_id=? AND from_nickname=?)
+           + (SELECT COALESCE(SUM(amount_cents),0) FROM settlements
+             WHERE trip_id=? AND to_nickname=?)""",
+        (trip_id, trip_id, trip_id, POT_NICK, trip_id, POT_NICK)).fetchone()
+    return int(r[0] or 0)
+
+
 def trip_state(c, trip_row, member_row=None):
     members = [member_public(r) for r in c.execute("SELECT * FROM members WHERE trip_id=? ORDER BY created_at", (trip_row["id"],))]
     places = []
@@ -262,6 +291,9 @@ def trip_state(c, trip_row, member_row=None):
     expenses = [expense_public(r) for r in c.execute("SELECT * FROM expenses WHERE trip_id=? ORDER BY created_at", (trip_row["id"],))]
     settlements = [settlement_public(r) for r in c.execute("SELECT * FROM settlements WHERE trip_id=? ORDER BY created_at", (trip_row["id"],))]
     nicknames = [m["nickname"] for m in members]
+    # El bote es una parte más de la contabilidad (su balance <= 0 = dinero en caja)
+    if POT_NICK not in nicknames:
+        nicknames = nicknames + [POT_NICK]
     paid, owed, nets = compute_balances(settled_expenses(expenses), settlements, nicknames)
     balances = [{"nickname": n, "paidCents": paid[n], "paid": money(paid[n]),
                  "shareCents": owed[n], "share": money(owed[n]),
@@ -275,12 +307,21 @@ def trip_state(c, trip_row, member_row=None):
     # El bote nunca queda en negativo: un gasto del bote solo se guarda si el bote lo
     # cubre (el servidor lo rechaza con 400 si no). Si falta dinero, la diferencia se
     # anade en el momento como aportacion antes de guardar el gasto.
-    remaining = contributed - spent_pot
+    remaining = pot_remaining(c, trip_row["id"])
+    # Ronda rápida: lo aportado (confirmado) por cada compañero
+    by_member, _seen = [], set()
+    for e in confirmed_contrib:
+        if e["payer"] not in _seen:
+            _seen.add(e["payer"])
+            by_member.append({"nickname": e["payer"],
+                              "cents": sum(x["amountCents"] for x in confirmed_contrib if x["payer"] == e["payer"])})
+    by_member = [{"nickname": b["nickname"], "cents": b["cents"], "amount": money(b["cents"])} for b in by_member]
     pot = {
         "treasurer": treasurer_nick,
         "contributedCents": contributed, "contributed": money(contributed),
         "spentFromPotCents": spent_pot, "spentFromPot": money(spent_pot),
         "remainingCents": remaining, "remaining": money(remaining),
+        "byMember": by_member,
         "pendingCents": pending_cents, "pending": money(pending_cents),
         "pendingList": [{"id": e["id"], "nickname": e["payer"], "amountCents": e["amountCents"],
                          "amount": e["amount"], "createdAt": e["createdAt"]} for e in pending_contrib],
@@ -412,6 +453,8 @@ class H(BaseHTTPRequestHandler):
                 return self.set_treasurer(parts[2])
             if len(parts) == 5 and parts[0] == "api" and parts[1] == "trips" and parts[3] == "pot" and parts[4] == "contribute":
                 return self.pot_contribute(parts[2])
+            if len(parts) == 5 and parts[0] == "api" and parts[1] == "trips" and parts[3] == "pot" and parts[4] == "distribute":
+                return self.pot_distribute(parts[2])
             if len(parts) == 7 and parts[0] == "api" and parts[1] == "trips" and parts[3] == "pot" and parts[4] == "contributions" and parts[6] == "confirm":
                 return self.pot_confirm(parts[2], parts[5])
             return self.err(404, "no encontrado")
@@ -437,6 +480,8 @@ class H(BaseHTTPRequestHandler):
         nick = clean_str(b.get("nickname"), 30, "nickname")
         if not name or not nick:
             return self.err(400, "name y nickname son obligatorios")
+        if nick.strip().casefold() == POT_NICK.casefold():
+            return self.err(400, "ese apodo está reservado para el bote")
         tid, mid, token = uuid.uuid4().hex, uuid.uuid4().hex, uuid.uuid4().hex
         with LOCK, db() as c:
             code = new_code(c)
@@ -459,6 +504,8 @@ class H(BaseHTTPRequestHandler):
         device = clean_str(b.get("deviceId"), 80, "deviceId")
         if not code or not nick:
             return self.err(400, "code y nickname son obligatorios")
+        if nick.strip().casefold() == POT_NICK.casefold():
+            return self.err(400, "ese apodo está reservado para el bote")
         with LOCK, db() as c:
             t = c.execute("SELECT * FROM trips WHERE invite_code=?", (code,)).fetchone()
             if not t:
@@ -502,6 +549,8 @@ class H(BaseHTTPRequestHandler):
             expenses = [expense_public(r) for r in c.execute("SELECT * FROM expenses WHERE trip_id=? ORDER BY created_at", (t["id"],))]
             settlements = [settlement_public(r) for r in c.execute("SELECT * FROM settlements WHERE trip_id=? ORDER BY created_at", (t["id"],))]
             nicknames = [m["nickname"] for m in members]
+            if POT_NICK not in nicknames:
+                nicknames = nicknames + [POT_NICK]
             paid, owed, nets = compute_balances(settled_expenses(expenses), settlements, nicknames)
             balances = [{"nickname": n, "paidCents": paid[n], "paid": money(paid[n]),
                          "shareCents": owed[n], "share": money(owed[n]),
@@ -602,13 +651,14 @@ class H(BaseHTTPRequestHandler):
             if from_pot:
                 # El bote nunca queda en negativo: si no lo cubre, se rechaza.
                 # El cliente recarga primero la diferencia como aportacion y reintenta.
-                prow = c.execute("SELECT COALESCE(SUM(amount_cents),0) AS t FROM expenses WHERE trip_id=? AND kind='contribution' AND status='confirmed'", (trip_id,)).fetchone()
-                srow = c.execute("SELECT COALESCE(SUM(amount_cents),0) AS t FROM expenses WHERE trip_id=? AND from_pot=1", (trip_id,)).fetchone()
-                avail = (int(prow["t"] or 0) if prow else 0) - (int(srow["t"] or 0) if srow else 0)
+                # "Lo que queda" descuenta tambien repartos/pagos ya hechos desde el bote.
+                avail = pot_remaining(c, trip_id)
                 if total > avail:
                     return self.err(400, "el bote no cubre el gasto")
-            payer = payer_raw or (treasurer_nick if from_pot else "")
-            if payer not in nicks:
+            payer = POT_NICK if from_pot else payer_raw
+            if not from_pot and payer == POT_NICK:
+                return self.err(400, "el bote solo paga con 'Pagado del bote'")
+            if payer != POT_NICK and payer not in nicks:
                 return self.err(400, "quien paga tiene que ser del viaje")
             pn = []
             for p in raw_parts:
@@ -694,8 +744,10 @@ class H(BaseHTTPRequestHandler):
             return self.err(400, "from y to tienen que ser dos companeros distintos")
         with LOCK, db() as c:
             nicks = self.member_nicks(c, trip_id)
-            if frm not in nicks or to not in nicks:
-                return self.err(400, "from/to tienen que ser del viaje")
+            if frm not in nicks and frm != POT_NICK:
+                return self.err(400, "from tiene que ser del viaje o el bote")
+            if to not in nicks and to != POT_NICK:
+                return self.err(400, "to tiene que ser del viaje o el bote")
             sid = uuid.uuid4().hex
             c.execute(
                 "INSERT INTO settlements(id,trip_id,member_id,from_nickname,to_nickname,amount_cents,request_id,created_at) VALUES(?,?,?,?,?,?,?,?)",
@@ -726,7 +778,7 @@ class H(BaseHTTPRequestHandler):
         self.send_json(200, {"ok": True, "treasurer": out})
 
     def pot_contribute(self, trip_id):
-        """Aportacion al bote: la crea como expense kind=contribution, participants=[tesorero]."""
+        """Aportacion al bote: la crea como expense kind=contribution, participants=[🫙 Bote]."""
         a = self.auth(trip_id)
         if not a:
             return
@@ -755,7 +807,7 @@ class H(BaseHTTPRequestHandler):
             c.execute(
                 "INSERT INTO expenses(id,trip_id,member_id,payer_nickname,description,amount_cents,currency,split_mode,participants_json,kind,status,from_pot,photo_path,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (eid, trip_id, m["id"], nick, "Aportación al bote de " + nick, total, "EUR", "equal",
-                 json.dumps([{"nickname": treasurer_nick, "cents": total}], ensure_ascii=False),
+                 json.dumps([{"nickname": POT_NICK, "cents": total}], ensure_ascii=False),
                  "contribution", status, 0, "", now_iso()),
             )
             r = c.execute("SELECT * FROM expenses WHERE id=?", (eid,)).fetchone()
@@ -783,6 +835,49 @@ class H(BaseHTTPRequestHandler):
             else:
                 c.execute("DELETE FROM expenses WHERE id=?", (cid,))
         self.send_json(200, {"ok": True, "confirmed": ok})
+
+    def pot_distribute(self, trip_id):
+        """Repartir el sobrante del bote: solo el tesorero. Crea settlements
+        {from: 🫙 Bote, to: miembro, amount: parte}. No toca los gastos."""
+        a = self.auth(trip_id)
+        if not a:
+            return
+        m, _t = a
+        b = self.read_json()
+        raw = b.get("nicknames") or []
+        if not isinstance(raw, list):
+            return self.err(400, "nicknames tiene que ser una lista")
+        with LOCK, db() as c:
+            row = c.execute("SELECT treasurer_member_id FROM trips WHERE id=?", (trip_id,)).fetchone()
+            tmid = (row["treasurer_member_id"] if row and "treasurer_member_id" in row.keys() else "") or ""
+            if not tmid or m["id"] != tmid:
+                return self.err(403, "solo quien lleva el bote puede repartir el sobrante")
+            nicks = self.member_nicks(c, trip_id)
+            sel = []
+            for x in raw:
+                n = clean_str(x, 30, "nickname")
+                if n == POT_NICK:
+                    return self.err(400, "el bote no se reparte a sí mismo")
+                if n not in nicks:
+                    return self.err(400, "no es del viaje: " + n)
+                if n in sel:
+                    return self.err(400, "duplicado: " + n)
+                sel.append(n)
+            if not sel:
+                return self.err(400, "elige al menos a una persona")
+            r = pot_remaining(c, trip_id)
+            if r <= 0:
+                return self.err(400, "no hay sobrante en el bote")
+            shares = self.split_equal(r, sel)
+            out = []
+            for s in shares:
+                sid = uuid.uuid4().hex
+                c.execute(
+                    "INSERT INTO settlements(id,trip_id,member_id,from_nickname,to_nickname,amount_cents,request_id,created_at) VALUES(?,?,?,?,?,?,?,?)",
+                    (sid, trip_id, m["id"], POT_NICK, s["nickname"], s["cents"], "", now_iso()),
+                )
+                out.append({"to": s["nickname"], "amountCents": s["cents"], "amount": money(s["cents"])})
+        self.send_json(201, {"ok": True, "distributed": out})
 
     def serve_photo(self, p):
         parts = [unquote(x) for x in p.split("/") if x]

@@ -36,16 +36,21 @@ GASTOS — cómo funciona
 - Cualquiera puede añadir gastos; solo quien lo registró o el
   organizador puede borrarlo.
 
-BOTE COMÚN
-----------
+BOTE COMÚN (su propia cuenta: 🫙 Bote)
+-------------------------------------
+- El bote es una cuenta más del viaje (apodo reservado "🫙 Bote"):
+  las aportaciones van AL BOTE (no al saldo del tesorero) y los
+  gastos "del bote" los paga 🫙 Bote. El tesorero ya no "debe" nada.
 - Si hacéis fondo común: elegid quién lo lleva (tesorero). Botón
   "Aportar al bote" (importe → Aportar). La aportación nace PENDIENTE
   y solo cuenta cuando el tesorero la confirma (Confirmar/Rechazar).
 - La tesorera puede apuntar la aportación de un compañero sin móvil:
   nace ya confirmada. Nadie salvo ella puede apuntar aportaciones
   ajenas.
-- Al añadir un gasto, el interruptor "Pagado del bote" pone al
-  tesorero como pagador y muestra "Bote: quedan X €".
+- Tarjeta del bote: "🫙 Bote · en caja: X €" + ronda rápida de lo
+  aportado por cada uno ("Aportado por: Bruno 100 € · Ana 20 €").
+- Al añadir un gasto, el interruptor "Pagado del bote" pone a 🫙 Bote
+  como pagador y muestra "Bote: quedan X €".
 - El bote NUNCA queda en negativo: si el gasto supera lo que queda,
   el servidor lo rechaza (400). En el formulario aparece "⚠️ Faltan
   Y €" con "Añadir al bote ahora": importe pre-rellenado con Y
@@ -54,8 +59,11 @@ BOTE COMÚN
   aportación falla, el gasto no se guarda. Si quien aporta no lleva
   el bote, la aportación nace pendiente y el gasto se guarda cuando
   el tesorero la confirme.
-- La liquidación final es siempre persona a persona en "Saldar
-  cuentas"; los pagos nunca salen del bote.
+- Si al final sobra dinero: botón "Repartir sobrante" (solo el
+  tesorero), elige entre quiénes (+ "Seleccionar todos") y el bote
+  reparte a partes iguales. Del bote solo sale con "Repartir
+  sobrante": en "Saldar cuentas" los movimientos del bote salen en
+  su propio grupo "🫙 Del bote".
 
 PRIVACIDAD DEL LOCALIZADOR
 --------------------------

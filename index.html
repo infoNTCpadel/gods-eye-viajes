@@ -175,7 +175,7 @@ a{color:#e8c877}
       <div class="row"><button id="btnExpense">Guardar gasto</button></div>
     </div>
     <div class="grouph">Saldar cuentas</div>
-    <div class="mini">Los pagos son entre personas, no salen del bote.</div>
+    <div class="mini">Del bote solo sale con «Repartir sobrante».</div>
     <div id="settleList"></div>
     <div class="card">
       <label>Registrar pago</label>
@@ -226,6 +226,7 @@ a{color:#e8c877}
 const SES_KEY='godsEyeViajes_v2session';
 const DEV_KEY='godsEyeViajes_v2device';
 const MODE_KEY='godsEyeViajes_v2splitmode';
+const POT_NICK='🫙 Bote'; // el bote es su propia cuenta
 let session=loadJson(SES_KEY,null);           // {tripId,inviteCode,memberToken,memberId,nickname,role}
 let serverState=null;                          // {trip,members,places,expenses,settlements,balances,whoPaysWhom}
 let photoData='', ticketData='';
@@ -336,10 +337,14 @@ function renderDiary(){
   const box=document.getElementById('days');
   const places=(serverState && serverState.places)||[];
   if(!places.length){ box.innerHTML='<div class="card empty"><div class="big">📸</div><div><b>Aún no hay fotos</b><br>Sé el primero del viaje en subir una.</div></div>'; return; }
+  const byA={};
+  places.forEach(p=>{ const a=(p.author||'').trim()||'?'; byA[a]=(byA[a]||0)+1; });
+  const head='<div class="grouph" style="margin-top:0">📸 '+places.length+' foto'+(places.length>1?'s':'')+' en total</div>'
+    +'<div class="mini" style="margin:-4px 0 8px">'+Object.keys(byA).map(a=>esc(a)+' '+byA[a]).join(' · ')+'</div>';
   const groups={};
   places.slice().sort((a,b)=>new Date(a.createdAt)-new Date(b.createdAt)).forEach(p=>{ const k=dayKey(p.createdAt); (groups[k]=groups[k]||[]).push(p); });
   const keys=Object.keys(groups).sort();
-  box.innerHTML=keys.map(k=>{
+  box.innerHTML=head+keys.map(k=>{
     const ps=groups[k];
     return '<div class="grouph">'+esc(dayLabel(ps[0].createdAt))+' · '+ps.length+' foto'+(ps.length>1?'s':'')+'</div><div class="grid">'+
       ps.map(p=>'<img loading="lazy" src="'+esc(p.photoUrl||'icon.svg')+'" onclick="openLb(\''+p.id+'\')" alt="">').join('')+'</div>';
@@ -405,6 +410,8 @@ function renderPot(){
   if(wrap && wrap.style.display!=='none') return; // no pisar mientras se escribe el importe
   const wrapFor=document.getElementById('potForWrap');
   if(wrapFor && wrapFor.style.display!=='none') return; // tampoco mientras la tesorera apunta
+  const wrapDist=document.getElementById('potDistWrap');
+  if(wrapDist && wrapDist.style.display!=='none') return; // ni mientras reparte el sobrante
   const pot=(serverState && serverState.pot)||{};
   const you=(serverState && serverState.you)||{};
   const mem=members();
@@ -416,7 +423,9 @@ function renderPot(){
     });
     return;
   }
-  const headHtml='<b>🫙 Bote: '+esc(pot.treasurer)+'</b><div class="mini">aportado '+esc(pot.contributed)+' · gastado del bote '+esc(pot.spentFromPot)+' · <span style="white-space:nowrap">quedan <b>'+esc(pot.remaining)+'</b></span></div>';
+  const byMem=(pot.byMember||[]).map(b=>esc(b.nickname)+' '+esc(b.amount)).join(' · ');
+  const headHtml='<b>🫙 Bote · en caja: '+esc(pot.remaining)+'</b>'
+    +'<div class="mini">Lo lleva '+esc(pot.treasurer)+(byMem?' · Aportado por: '+byMem:'')+'</div>';
   box.innerHTML='<div class="card" style="border-color:#d9a441">'+headHtml
     +((pot.pendingCents||0)>0?'<div class="mini" style="color:#d9a441">＋'+esc(fmtEuro(pot.pendingCents))+' pendientes de confirmar</div>':'')
     +(((pot.pendingList)||[]).some(p=>session&&p.nickname===session.nickname)?'<div class="mini">⏳ Tu aportación está pendiente de que '+esc(pot.treasurer)+' la confirme.</div>':'')
@@ -425,6 +434,12 @@ function renderPot(){
       +'<div id="potForWrap" style="display:none;margin-top:8px"><div class="mini">La apuntas tú: queda confirmada al momento.</div><div class="catchips" id="potForChips" style="margin:6px 0">'
       +mem.map(m=>'<button type="button" data-n="'+esc(m.nickname)+'">'+esc(m.nickname)+'</button>').join('')
       +'</div><label>Importe<input id="potForAmount" class="amount" inputmode="decimal" placeholder="0,00"></label><div class="row"><button id="btnPotForGo">Apuntar aportación</button></div></div>':'')
+    +(you.isTreasurer&&(pot.remainingCents||0)>0?'<div class="row" style="margin-top:6px"><button id="btnPotDist" class="sec">Repartir sobrante</button></div>'
+      +'<div id="potDistWrap" style="display:none;margin-top:8px"><div class="mini">Quedan <b>'+esc(pot.remaining)+'</b> en el bote. Elige entre quiénes se reparte:</div>'
+      +'<div class="catchips" id="potDistChips" style="margin:6px 0">'
+      +mem.map(m=>'<button type="button" data-n="'+esc(m.nickname)+'">'+esc(m.nickname)+'</button>').join('')
+      +'<button type="button" id="btnDistAll" class="sec">Seleccionar todos</button></div>'
+      +'<div class="row"><button id="btnPotDistGo">Repartir</button></div></div>':'')
     +'<div id="potContribWrap" style="display:none;margin-top:8px"><div class="mini">Aportas como <b>'+esc(session?session.nickname:'')+'</b>. El bote lo confirma '+esc(pot.treasurer)+'.</div><label>Importe<input id="potAmount" class="amount" inputmode="decimal" placeholder="0,00"></label><div class="row"><button id="btnPotGo">Aportar</button></div></div>'
     +renderPendingList()+'</div>';
   document.getElementById('btnPotContrib').onclick=()=>{
@@ -456,6 +471,33 @@ function renderPot(){
         await api('/api/trips/'+session.tripId+'/pot/contribute',{method:'POST',body:{amount:amount,nickname:potForNick}});
         document.getElementById('potForAmount').value=''; document.getElementById('potForWrap').style.display='none';
         await refreshState(true); toast('Aportación de '+potForNick+' apuntada ✔');
+      }catch(e){ toast('Error: '+e.message); }
+    }); };
+  }
+  /* Repartir el sobrante del bote: solo la tesorera */
+  var distSel={};
+  const btnDist=document.getElementById('btnPotDist');
+  if(btnDist){
+    btnDist.onclick=()=>{ const w=document.getElementById('potDistWrap'); w.style.display=(w.style.display==='none')?'block':'none'; };
+    document.querySelectorAll('#potDistChips button[data-n]').forEach(b=>b.onclick=()=>{
+      const n=b.dataset.n;
+      if(distSel[n]){ delete distSel[n]; b.classList.remove('on'); }
+      else { distSel[n]=1; b.classList.add('on'); }
+    });
+    document.getElementById('btnDistAll').onclick=()=>{
+      const all=mem.every(m=>distSel[m.nickname]);
+      distSel={};
+      if(!all) mem.forEach(m=>{ distSel[m.nickname]=1; });
+      document.querySelectorAll('#potDistChips button[data-n]').forEach(b=>b.classList.toggle('on',!!distSel[b.dataset.n]));
+    };
+    document.getElementById('btnPotDistGo').onclick=()=>{ saving(document.getElementById('btnPotDistGo'),async()=>{
+      const sel=Object.keys(distSel);
+      if(!sel.length){ toast('Elige al menos a una persona.'); return; }
+      try{
+        const d=await api('/api/trips/'+session.tripId+'/pot/distribute',{method:'POST',body:{nicknames:sel}});
+        distSel={};
+        await refreshState(true);
+        toast('Sobrante repartido 🫙 '+(d.distributed||[]).map(x=>x.to+' '+x.amount).join(' · '));
       }catch(e){ toast('Error: '+e.message); }
     }); };
   }
@@ -530,7 +572,7 @@ function renderPotTopup(){
 }
 function renderExpenses(){
   renderPot();
-  const bs=(serverState && serverState.balances)||[];
+  const bs=((serverState && serverState.balances)||[]).filter(b=>b.nickname!==POT_NICK);
   const bBox=document.getElementById('balances');
   if(!bs.length){ bBox.innerHTML=''; }
   else {
@@ -543,7 +585,8 @@ function renderExpenses(){
   // formulario: chips
   const mem=members();
   const pot0=(serverState && serverState.pot)||{};
-  if(expFromPot && pot0.treasurer) expPayer=pot0.treasurer;
+  if(expFromPot) expPayer=POT_NICK;
+  else if(expPayer===POT_NICK && session) expPayer=session.nickname;
   if(!expPayer && session) expPayer=session.nickname;
   document.getElementById('payerChips').innerHTML=mem.map(m=>'<button type="button" data-n="'+esc(m.nickname)+'" class="'+(m.nickname===expPayer?'on':'')+'">'+esc(m.nickname)+'</button>').join('');
   document.querySelectorAll('#payerChips button').forEach(b=>b.onclick=()=>{ expPayer=b.dataset.n; renderExpenses(); });
@@ -551,11 +594,11 @@ function renderExpenses(){
   const ptw=document.getElementById('potToggleWrap');
   if(pot0.treasurer){ ptw.style.display='flex'; } else { ptw.style.display='none'; expFromPot=false; }
   const bfp=document.getElementById('btnFromPot');
-  if(bfp){ bfp.classList.toggle('on',expFromPot); bfp.onclick=()=>{ expFromPot=!expFromPot; renderExpenses(); splitPreview(); }; }
+  if(bfp){ bfp.classList.toggle('on',expFromPot); bfp.onclick=()=>{ expFromPot=!expFromPot; if(!expFromPot && session) expPayer=session.nickname; renderExpenses(); splitPreview(); }; }
   const pc=document.getElementById('payerChips');
   pc.style.opacity=expFromPot?'.45':''; pc.style.pointerEvents=expFromPot?'none':'';
   const pl=document.getElementById('payerLabel');
-  if(pl) pl.textContent=expFromPot?('Pagado del bote ('+pot0.treasurer+')'):'Quién pagó';
+  if(pl) pl.textContent=expFromPot?('Pagado del bote 🫙'):'Quién pagó';
   mem.forEach(m=>{ if(!(m.nickname in expParts)) expParts[m.nickname]={on:true,val:''}; });
   document.getElementById('partChips').innerHTML=mem.map(m=>'<button type="button" data-n="'+esc(m.nickname)+'" class="'+(expParts[m.nickname].on?'on':'off')+'">'+(expParts[m.nickname].on?'✓ ':'')+esc(m.nickname)+'</button>').join('');
   document.querySelectorAll('#partChips button').forEach(b=>b.onclick=()=>{ const n=b.dataset.n; expParts[n].on=!expParts[n].on; renderExpenses(); });
@@ -572,13 +615,20 @@ function renderExpenses(){
   document.getElementById('contribs').innerHTML=exCon.length?exCon.slice().reverse().map(rowHtml).join(''):'<div class="card">Sin aportaciones.</div>';
   document.getElementById('nExp').textContent=exExp.length;
   document.getElementById('nCon').textContent=exCon.length;
-  // saldar
+  // saldar: dos grupos — entre vosotros / del bote
   const w=(serverState && serverState.whoPaysWhom)||[];
-  document.getElementById('settleList').innerHTML=w.length?w.map(s=>'<div class="settle"><b>'+esc(s.from)+'</b> → <b>'+esc(s.to)+'</b>: <b>'+esc(s.amount)+'</b></div>').join(''):'<div class="mini">Todo en paz 🎉</div>';
+  const wP2P=w.filter(s=>s.from!==POT_NICK && s.to!==POT_NICK);
+  const wPot=w.filter(s=>s.from===POT_NICK || s.to===POT_NICK);
+  const rowS=s=>'<div class="settle"><b>'+esc(s.from)+'</b> → <b>'+esc(s.to)+'</b>: <b>'+esc(s.amount)+'</b></div>';
+  let settleHtml='';
+  if(wP2P.length) settleHtml+='<div class="mini" style="margin:6px 0 4px">Entre vosotros</div>'+wP2P.map(rowS).join('');
+  if(wPot.length) settleHtml+='<div class="mini" style="margin:8px 0 4px">🫙 Del bote</div>'+wPot.map(rowS).join('');
+  if(!settleHtml) settleHtml='<div class="mini">Todo en paz 🎉</div>';
+  document.getElementById('settleList').innerHTML=settleHtml;
   const st=(serverState && serverState.settlements)||[];
   document.getElementById('settlements').innerHTML=st.length?st.slice().reverse().map(s=>'<div class="mini" style="margin-top:6px">'+esc(s.from)+' → '+esc(s.to)+': <b>'+esc(s.amount)+'</b> · '+hhmm(s.createdAt)+'</div>').join(''):'<div class="mini" style="margin-top:6px">Ningún pago registrado.</div>';
-  document.getElementById('sFrom').innerHTML=mem.map(m=>'<option>'+esc(m.nickname)+'</option>').join('');
-  document.getElementById('sTo').innerHTML=mem.map(m=>'<option>'+esc(m.nickname)+'</option>').join('');
+  document.getElementById('sFrom').innerHTML=mem.map(m=>'<option>'+esc(m.nickname)+'</option>').join('')+'<option>'+esc(POT_NICK)+'</option>';
+  document.getElementById('sTo').innerHTML=mem.map(m=>'<option>'+esc(m.nickname)+'</option>').join('')+'<option>'+esc(POT_NICK)+'</option>';
   document.getElementById('nSet').textContent=(serverState && serverState.settlements||[]).length;
 }
 document.getElementById('btnToggleExpForm').onclick=()=>{ const w=document.getElementById('expFormWrap'); const open=w.style.display!=='none'; if(open){ w.style.display='none'; document.getElementById('btnToggleExpForm').textContent='＋ Añadir gasto'; } else { w.style.display='block'; document.getElementById('btnToggleExpForm').textContent='Cerrar'; renderExpenses(); splitPreview(); } };
