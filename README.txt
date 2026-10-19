@@ -36,6 +36,36 @@ GASTOS — cómo funciona
 - Cualquiera puede añadir gastos; solo quien lo registró o el
   organizador puede borrarlo.
 
+BOTE COMÚN
+----------
+- Si hacéis fondo común: elegid quién lo lleva (tesorero). Botón
+  "Aportar al bote" (importe → Aportar). La aportación nace PENDIENTE
+  y solo cuenta cuando el tesorero la confirma (Confirmar/Rechazar).
+- La tesorera puede apuntar la aportación de un compañero sin móvil:
+  nace ya confirmada. Nadie salvo ella puede apuntar aportaciones
+  ajenas.
+- Al añadir un gasto, el interruptor "Pagado del bote" pone al
+  tesorero como pagador.
+- Si el bote queda en negativo (el tesorero adelantó dinero), la
+  cabecera cambia a "Ana adelantó X €" y SOLO el tesorero ve el botón
+  "Pedir para reponer": importe pre-rellenado con lo que el grupo le
+  debe según las cuentas, elige a quién se lo pide y botón Pedir
+  (3 toques). Tras crearlo, "Compartir por WhatsApp" genera el texto:
+  "Ana ha adelantado 20 € del bote 🫙: Bruno 10 €, Carla 10 €".
+  La petición NO crea ningún gasto (evitaría doble conteo): solo
+  organiza devoluciones de deudas que ya existen; no altera balances
+  ni "Saldar cuentas".
+- Cada miembro ve su parte en la tarjeta "Ana pide reponer 20 €" con
+  "Marcar pagado" (1 toque); cuando todos pagan, la tarjeta se marca
+  "✓ Reembolsado". El pago se registra como settlement vinculado a
+  la petición; no se puede pagar de más.
+- Nota: tras reembolsar, el bote puede mostrar un pequeño residual negativo
+  igual a lo que el tesorero consumió del bote por encima de su propia
+  aportación (ej.: su parte de la cena 110 € menos sus 100 € aportados
+  = 10 € que salieron de su bolsillo para su propio consumo). Es
+  correcto contablemente; "Pedir para reponer" se pre-rellena con 0
+  porque el grupo ya no le debe nada.
+
 PRIVACIDAD DEL LOCALIZADOR
 --------------------------
 - OFF por defecto. Al activar eliges duración: 15 min / 1 h / 8 h.
