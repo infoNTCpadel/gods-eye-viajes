@@ -95,7 +95,8 @@ def init_db():
         ecols = {r["name"] for r in c.execute("PRAGMA table_info(expenses)")}
         for col, typ in (("currency", "TEXT DEFAULT 'EUR'"), ("split_mode", "TEXT DEFAULT 'equal'"),
                          ("participants_json", "TEXT DEFAULT '[]'"), ("photo_path", "TEXT DEFAULT ''"),
-                         ("kind", "TEXT DEFAULT 'expense'"), ("from_pot", "INTEGER DEFAULT 0")):
+                         ("kind", "TEXT DEFAULT 'expense'"), ("from_pot", "INTEGER DEFAULT 0"),
+                         ("status", "TEXT DEFAULT 'confirmed'")):
             if col not in ecols:
                 c.execute("ALTER TABLE expenses ADD COLUMN %s %s" % (col, typ))
         tcols = {r["name"] for r in c.execute("PRAGMA table_info(trips)")}
@@ -169,6 +170,7 @@ def expense_public(r):
         "amountCents": r["amount_cents"], "amount": money(r["amount_cents"]),
         "splitMode": r["split_mode"] or "equal", "parts": parts,
         "kind": (r["kind"] if "kind" in keys and r["kind"] else "expense"),
+        "status": (r["status"] if "status" in keys and r["status"] else "confirmed"),
         "fromPot": bool(r["from_pot"]) if "from_pot" in keys else False,
         "photoUrl": ("/api/photos/%s/%s" % (r["trip_id"], r["photo_path"]) if r["photo_path"] else ""),
         "authorMemberId": r["member_id"] or "", "createdAt": r["created_at"],
@@ -235,7 +237,13 @@ def get_treasurer(c, trip_id):
     return mid, (m["nickname"] if m else "")
 
 
-def trip_state(c, trip_row):
+def settled_expenses(expenses):
+    """Gastos que cuentan en la contabilidad: las aportaciones al bote solo cuando
+    el tesorero las confirma (status='confirmed')."""
+    return [e for e in expenses if e["kind"] != "contribution" or e["status"] == "confirmed"]
+
+
+def trip_state(c, trip_row, member_row=None):
     members = [member_public(r) for r in c.execute("SELECT * FROM members WHERE trip_id=? ORDER BY created_at", (trip_row["id"],))]
     places = []
     try:
@@ -245,19 +253,29 @@ def trip_state(c, trip_row):
     expenses = [expense_public(r) for r in c.execute("SELECT * FROM expenses WHERE trip_id=? ORDER BY created_at", (trip_row["id"],))]
     settlements = [settlement_public(r) for r in c.execute("SELECT * FROM settlements WHERE trip_id=? ORDER BY created_at", (trip_row["id"],))]
     nicknames = [m["nickname"] for m in members]
-    paid, owed, nets = compute_balances(expenses, settlements, nicknames)
+    paid, owed, nets = compute_balances(settled_expenses(expenses), settlements, nicknames)
     balances = [{"nickname": n, "paidCents": paid[n], "paid": money(paid[n]),
                  "shareCents": owed[n], "share": money(owed[n]),
                  "balanceCents": nets[n], "balance": money(abs(nets[n]))} for n in nicknames]
-    _tmid, treasurer_nick = get_treasurer(c, trip_row["id"])
-    contributed = sum(e["amountCents"] for e in expenses if e["kind"] == "contribution")
+    tmid, treasurer_nick = get_treasurer(c, trip_row["id"])
+    confirmed_contrib = [e for e in expenses if e["kind"] == "contribution" and e["status"] == "confirmed"]
+    pending_contrib = [e for e in expenses if e["kind"] == "contribution" and e["status"] == "pending"]
+    contributed = sum(e["amountCents"] for e in confirmed_contrib)
+    pending_cents = sum(e["amountCents"] for e in pending_contrib)
     spent_pot = sum(e["amountCents"] for e in expenses if e["fromPot"])
     pot = {
         "treasurer": treasurer_nick,
         "contributedCents": contributed, "contributed": money(contributed),
         "spentFromPotCents": spent_pot, "spentFromPot": money(spent_pot),
         "remainingCents": contributed - spent_pot, "remaining": money(contributed - spent_pot),
+        "pendingCents": pending_cents, "pending": money(pending_cents),
+        "pendingList": [{"id": e["id"], "nickname": e["payer"], "amountCents": e["amountCents"],
+                         "amount": e["amount"], "createdAt": e["createdAt"]} for e in pending_contrib],
     }
+    you = None
+    if member_row:
+        you = {"nickname": member_row["nickname"],
+               "isTreasurer": bool(tmid) and member_row["id"] == tmid}
     return {
         "trip": trip_public(trip_row),
         "members": members,
@@ -267,6 +285,7 @@ def trip_state(c, trip_row):
         "balances": balances,
         "whoPaysWhom": who_pays_whom(nets),
         "pot": pot,
+        "you": you,
     }
 
 
@@ -380,6 +399,8 @@ class H(BaseHTTPRequestHandler):
                 return self.set_treasurer(parts[2])
             if len(parts) == 5 and parts[0] == "api" and parts[1] == "trips" and parts[3] == "pot" and parts[4] == "contribute":
                 return self.pot_contribute(parts[2])
+            if len(parts) == 7 and parts[0] == "api" and parts[1] == "trips" and parts[3] == "pot" and parts[4] == "contributions" and parts[6] == "confirm":
+                return self.pot_confirm(parts[2], parts[5])
             return self.err(404, "no encontrado")
         except ValueError as e:
             return self.err(400, str(e))
@@ -454,7 +475,7 @@ class H(BaseHTTPRequestHandler):
             return self.err(403, "ese token no pertenece a este viaje")
         with LOCK, db() as c:
             row = c.execute("SELECT * FROM trips WHERE id=?", (t["id"],)).fetchone()
-            state = trip_state(c, row)
+            state = trip_state(c, row, m)
         self.send_json(200, {"ok": True, **state})
 
     def get_balances(self, trip_id):
@@ -468,7 +489,7 @@ class H(BaseHTTPRequestHandler):
             expenses = [expense_public(r) for r in c.execute("SELECT * FROM expenses WHERE trip_id=? ORDER BY created_at", (t["id"],))]
             settlements = [settlement_public(r) for r in c.execute("SELECT * FROM settlements WHERE trip_id=? ORDER BY created_at", (t["id"],))]
             nicknames = [m["nickname"] for m in members]
-            paid, owed, nets = compute_balances(expenses, settlements, nicknames)
+            paid, owed, nets = compute_balances(settled_expenses(expenses), settlements, nicknames)
             balances = [{"nickname": n, "paidCents": paid[n], "paid": money(paid[n]),
                          "shareCents": owed[n], "share": money(owed[n]),
                          "balanceCents": nets[n], "balance": money(abs(nets[n]))} for n in nicknames]
@@ -706,13 +727,36 @@ class H(BaseHTTPRequestHandler):
                 return self.err(400, "designa primero quién lleva el bote")
             eid = uuid.uuid4().hex
             c.execute(
-                "INSERT INTO expenses(id,trip_id,member_id,payer_nickname,description,amount_cents,currency,split_mode,participants_json,kind,from_pot,photo_path,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO expenses(id,trip_id,member_id,payer_nickname,description,amount_cents,currency,split_mode,participants_json,kind,status,from_pot,photo_path,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (eid, trip_id, m["id"], nick, "Aportación al bote de " + nick, total, "EUR", "equal",
                  json.dumps([{"nickname": treasurer_nick, "cents": total}], ensure_ascii=False),
-                 "contribution", 0, "", now_iso()),
+                 "contribution", "pending", 0, "", now_iso()),
             )
             r = c.execute("SELECT * FROM expenses WHERE id=?", (eid,)).fetchone()
         self.send_json(201, {"ok": True, "expense": expense_public(r)})
+
+    def pot_confirm(self, trip_id, cid):
+        """El tesorero confirma (ok=true) o rechaza (ok=false, se borra) una aportacion."""
+        a = self.auth(trip_id)
+        if not a:
+            return
+        m, _t = a
+        b = self.read_json()
+        ok = bool(b.get("ok"))
+        with LOCK, db() as c:
+            row = c.execute("SELECT treasurer_member_id FROM trips WHERE id=?", (trip_id,)).fetchone()
+            tmid = (row["treasurer_member_id"] if row and "treasurer_member_id" in row.keys() else "") or ""
+            if not tmid or m["id"] != tmid:
+                return self.err(403, "solo quien lleva el bote puede confirmar aportaciones")
+            e = c.execute("SELECT * FROM expenses WHERE id=? AND trip_id=? AND kind='contribution'",
+                          (cid, trip_id)).fetchone()
+            if not e:
+                return self.err(404, "aportación no existe")
+            if ok:
+                c.execute("UPDATE expenses SET status='confirmed' WHERE id=?", (cid,))
+            else:
+                c.execute("DELETE FROM expenses WHERE id=?", (cid,))
+        self.send_json(200, {"ok": True, "confirmed": ok})
 
     def serve_photo(self, p):
         parts = [unquote(x) for x in p.split("/") if x]

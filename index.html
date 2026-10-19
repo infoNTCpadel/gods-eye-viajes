@@ -381,7 +381,12 @@ function renderPot(){
     });
     return;
   }
-  box.innerHTML='<div class="card" style="border-color:#d9a441"><b>🫙 Bote: '+esc(pot.treasurer)+'</b><div class="mini">aportado '+esc(pot.contributed)+' · gastado del bote '+esc(pot.spentFromPot)+' · quedan <b>'+esc(pot.remaining)+'</b></div><div class="row"><button id="btnPotContrib">Aportar al bote</button></div><div id="potContribWrap" style="display:none;margin-top:8px"><div class="mini">Aportas como <b>'+esc(session?session.nickname:'')+'</b></div><label>Importe<input id="potAmount" class="amount" inputmode="decimal" placeholder="0,00"></label><div class="row"><button id="btnPotGo">Aportar</button></div></div></div>';
+  box.innerHTML='<div class="card" style="border-color:#d9a441"><b>🫙 Bote: '+esc(pot.treasurer)+'</b><div class="mini">aportado '+esc(pot.contributed)+' · gastado del bote '+esc(pot.spentFromPot)+' · quedan <b>'+esc(pot.remaining)+'</b></div>'
+    +((pot.pendingCents||0)>0?'<div class="mini" style="color:#d9a441">＋'+esc(fmtEuro(pot.pendingCents))+' pendientes de confirmar</div>':'')
+    +(((pot.pendingList)||[]).some(p=>session&&p.nickname===session.nickname)?'<div class="mini">⏳ Tu aportación está pendiente de que '+esc(pot.treasurer)+' la confirme.</div>':'')
+    +'<div class="row"><button id="btnPotContrib">Aportar al bote</button></div>'
+    +'<div id="potContribWrap" style="display:none;margin-top:8px"><div class="mini">Aportas como <b>'+esc(session?session.nickname:'')+'</b>. El bote lo confirma '+esc(pot.treasurer)+'.</div><label>Importe<input id="potAmount" class="amount" inputmode="decimal" placeholder="0,00"></label><div class="row"><button id="btnPotGo">Aportar</button></div></div>'
+    +renderPendingList()+'</div>';
   document.getElementById('btnPotContrib').onclick=()=>{
     const w=document.getElementById('potContribWrap'); w.style.display=(w.style.display==='none')?'block':'none';
   };
@@ -391,10 +396,30 @@ function renderPot(){
     try{
       await api('/api/trips/'+session.tripId+'/pot/contribute',{method:'POST',body:{amount:amount}});
       document.getElementById('potAmount').value=''; document.getElementById('potContribWrap').style.display='none';
-      await refreshState(true); toast('Aportación al bote 🫙');
+      await refreshState(true); toast('Aportación enviada 🫙 El bote la confirma.');
     }catch(e){ toast('Error: '+e.message); }
   };
 }
+/* Aportaciones pendientes: solo el tesorero confirma/rechaza */
+function renderPendingList(){
+  const pot=(serverState && serverState.pot)||{};
+  const pend=pot.pendingList||[];
+  if(!pend.length) return '';
+  const you=(serverState && serverState.you)||{};
+  let h='<div class="grouph" style="margin-top:10px">Por confirmar ('+pend.length+')</div>';
+  h+=pend.map(p=>'<div class="bal"><div><b>'+esc(p.nickname)+'</b><div class="mini">⏳ '+esc(p.amount)+'</div></div>'
+    +(you.isTreasurer?'<div style="display:flex;gap:6px"><button onclick="confirmContrib(\''+p.id+'\',true)">Confirmar</button><button class="sec" onclick="confirmContrib(\''+p.id+'\',false)">Rechazar</button></div>':'')
+    +'</div>').join('');
+  return h;
+}
+window.confirmContrib=async(id,ok)=>{
+  if(!session) return;
+  if(!ok && !confirm('¿Rechazar esta aportación? Desaparecerá de las cuentas.')) return;
+  try{
+    await api('/api/trips/'+session.tripId+'/pot/contributions/'+id+'/confirm',{method:'POST',body:{ok:ok}});
+    await refreshState(true); toast(ok?'Aportación confirmada ✔':'Aportación rechazada.');
+  }catch(e){ toast('Error: '+e.message); }
+};
 function members(){ return (serverState && serverState.members)||[]; }
 function splitPreview(){
   const total=parseAmt(document.getElementById('eAmount').value);
@@ -454,7 +479,7 @@ function renderExpenses(){
   const ex=(serverState && serverState.expenses)||[];
   document.getElementById('expenses').innerHTML=ex.length?ex.slice().reverse().map(e=>{
     const mine=session && (session.memberId===e.authorMemberId || isOrganizer());
-    const badge=e.kind==='contribution'?'<span class="mini" style="color:#7fb069">🫙 bote</span> ':(e.fromPot?'<span class="mini" style="color:#d9a441">del bote</span> ':'');
+    const badge=e.kind==='contribution'?('<span class="mini" style="color:'+(e.status==='pending'?'#d9a441':'#7fb069')+'">'+(e.status==='pending'?'⏳ pendiente':'🫙 bote')+'</span> '):(e.fromPot?'<span class="mini" style="color:#d9a441">del bote</span> ':'');
     return '<div class="expense"><div style="display:flex;justify-content:space-between;align-items:center"><b>'+badge+esc(e.description)+'</b><span class="amt">'+esc(e.amount)+'</span></div><div class="mini">Pagó '+esc(e.payer)+' · '+hhmm(e.createdAt)+'</div><div class="mini">'+e.parts.map(p=>esc(p.nickname)+' '+(p.cents/100).toFixed(2).replace('.',',')+'€').join(' · ')+'</div>'+(e.photoUrl?'<img src="'+esc(e.photoUrl)+'" style="width:100%;max-height:140px;object-fit:cover;border-radius:8px;margin-top:6px">':'')+(mine?'<div class="actions"><button class="sec" onclick="delExpense(\''+e.id+'\')">Eliminar</button></div>':'')+'</div>';
   }).join(''):'<div class="card">Sin gastos todavía.</div>';
   // saldar
