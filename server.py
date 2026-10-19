@@ -194,30 +194,6 @@ def settlement_public(r):
     }
 
 
-def request_public(c, r):
-    """Peticion de reponer el bote: shares con lo ya pagado por cada uno.
-    Las peticiones son una vista organizativa sobre deudas ya existentes;
-    NO alteran balances ni whoPaysWhom (esos solo usan expenses+settlements)."""
-    try:
-        shares = json.loads(r["members_json"] or "[]")
-    except Exception:
-        shares = []
-    out, all_paid = [], True
-    for s in shares:
-        nick = s.get("nickname", "")
-        share = int(s.get("cents", 0) or 0)
-        prow = c.execute(
-            "SELECT COALESCE(SUM(amount_cents),0) AS t FROM settlements WHERE trip_id=? AND request_id=? AND from_nickname=?",
-            (r["trip_id"], r["id"], nick)).fetchone()
-        paid = int(prow["t"] or 0) if prow else 0
-        out.append({"nickname": nick, "shareCents": share, "share": money(share),
-                    "paidCents": paid, "paid": money(paid)})
-        if paid < share:
-            all_paid = False
-    return {"id": r["id"], "amountCents": r["amount_cents"], "amount": money(r["amount_cents"]),
-            "shares": out, "done": all_paid, "createdAt": r["created_at"]}
-
-
 def compute_balances(expenses, settlements, nicknames):
     """Balance por persona: positivo = le deben, negativo = debe."""
     paid = {n: 0 for n in nicknames}
@@ -296,32 +272,15 @@ def trip_state(c, trip_row, member_row=None):
     contributed = sum(e["amountCents"] for e in confirmed_contrib)
     pending_cents = sum(e["amountCents"] for e in pending_contrib)
     spent_pot = sum(e["amountCents"] for e in expenses if e["fromPot"])
-    # Peticiones de reponer: solo organizan devoluciones ya debidas, no tocan la contabilidad.
-    requests = []
-    try:
-        for rr in c.execute("SELECT * FROM pot_requests WHERE trip_id=? ORDER BY created_at", (trip_row["id"],)):
-            requests.append(request_public(c, rr))
-    except Exception:
-        pass
-    reimbursed = 0
-    try:
-        prow = c.execute("SELECT COALESCE(SUM(amount_cents),0) AS t FROM settlements WHERE trip_id=? AND request_id<>''",
-                         (trip_row["id"],)).fetchone()
-        reimbursed = int(prow["t"] or 0) if prow else 0
-    except Exception:
-        pass
-    fronted = max(0, spent_pot - contributed - reimbursed)   # lo que la tesorera adelanto de su bolsillo
-    remaining = contributed - spent_pot + reimbursed
-    treasurer_owed = max(0, nets.get(treasurer_nick, 0)) if treasurer_nick else 0
+    # El bote nunca queda en negativo: un gasto del bote solo se guarda si el bote lo
+    # cubre (el servidor lo rechaza con 400 si no). Si falta dinero, la diferencia se
+    # anade en el momento como aportacion antes de guardar el gasto.
+    remaining = contributed - spent_pot
     pot = {
         "treasurer": treasurer_nick,
         "contributedCents": contributed, "contributed": money(contributed),
         "spentFromPotCents": spent_pot, "spentFromPot": money(spent_pot),
         "remainingCents": remaining, "remaining": money(remaining),
-        "frontedCents": fronted, "fronted": money(fronted),
-        "reimbursedCents": reimbursed, "reimbursed": money(reimbursed),
-        "treasurerOwedCents": treasurer_owed, "treasurerOwed": money(treasurer_owed),
-        "requests": requests,
         "pendingCents": pending_cents, "pending": money(pending_cents),
         "pendingList": [{"id": e["id"], "nickname": e["payer"], "amountCents": e["amountCents"],
                          "amount": e["amount"], "createdAt": e["createdAt"]} for e in pending_contrib],
@@ -453,8 +412,6 @@ class H(BaseHTTPRequestHandler):
                 return self.set_treasurer(parts[2])
             if len(parts) == 5 and parts[0] == "api" and parts[1] == "trips" and parts[3] == "pot" and parts[4] == "contribute":
                 return self.pot_contribute(parts[2])
-            if len(parts) == 5 and parts[0] == "api" and parts[1] == "trips" and parts[3] == "pot" and parts[4] == "request":
-                return self.pot_request(parts[2])
             if len(parts) == 7 and parts[0] == "api" and parts[1] == "trips" and parts[3] == "pot" and parts[4] == "contributions" and parts[6] == "confirm":
                 return self.pot_confirm(parts[2], parts[5])
             return self.err(404, "no encontrado")
@@ -642,6 +599,14 @@ class H(BaseHTTPRequestHandler):
             _tmid, treasurer_nick = get_treasurer(c, trip_id)
             if from_pot and not treasurer_nick:
                 return self.err(400, "designa primero quién lleva el bote")
+            if from_pot:
+                # El bote nunca queda en negativo: si no lo cubre, se rechaza.
+                # El cliente recarga primero la diferencia como aportacion y reintenta.
+                prow = c.execute("SELECT COALESCE(SUM(amount_cents),0) AS t FROM expenses WHERE trip_id=? AND kind='contribution' AND status='confirmed'", (trip_id,)).fetchone()
+                srow = c.execute("SELECT COALESCE(SUM(amount_cents),0) AS t FROM expenses WHERE trip_id=? AND from_pot=1", (trip_id,)).fetchone()
+                avail = (int(prow["t"] or 0) if prow else 0) - (int(srow["t"] or 0) if srow else 0)
+                if total > avail:
+                    return self.err(400, "el bote no cubre el gasto")
             payer = payer_raw or (treasurer_nick if from_pot else "")
             if payer not in nicks:
                 return self.err(400, "quien paga tiene que ser del viaje")
@@ -727,37 +692,14 @@ class H(BaseHTTPRequestHandler):
         to = clean_str(b.get("to"), 30, "to")
         if not frm or not to or frm == to:
             return self.err(400, "from y to tienen que ser dos companeros distintos")
-        req_id = clean_str(b.get("request_id"), 40, "request_id")
         with LOCK, db() as c:
             nicks = self.member_nicks(c, trip_id)
             if frm not in nicks or to not in nicks:
                 return self.err(400, "from/to tienen que ser del viaje")
-            if req_id:
-                # Pago contra una peticion de reponer: valida que encaje con la parte
-                # pendiente de ese compañero (no se puede pagar de mas).
-                rq = c.execute("SELECT * FROM pot_requests WHERE id=? AND trip_id=?", (req_id, trip_id)).fetchone()
-                if not rq:
-                    return self.err(400, "petición no existe")
-                try:
-                    rshares = json.loads(rq["members_json"] or "[]")
-                except Exception:
-                    rshares = []
-                share = next((int(s.get("cents", 0) or 0) for s in rshares if s.get("nickname") == frm), None)
-                if share is None:
-                    return self.err(400, "ese compañero no está en la petición")
-                _tmid, t_nick = get_treasurer(c, trip_id)
-                if to != t_nick:
-                    return self.err(400, "la devolución es para quien lleva el bote")
-                prow = c.execute(
-                    "SELECT COALESCE(SUM(amount_cents),0) AS t FROM settlements WHERE trip_id=? AND request_id=? AND from_nickname=?",
-                    (trip_id, req_id, frm)).fetchone()
-                already = int(prow["t"] or 0) if prow else 0
-                if cents > share - already:
-                    return self.err(400, "más de lo que le toca devolver")
             sid = uuid.uuid4().hex
             c.execute(
                 "INSERT INTO settlements(id,trip_id,member_id,from_nickname,to_nickname,amount_cents,request_id,created_at) VALUES(?,?,?,?,?,?,?,?)",
-                (sid, trip_id, m["id"], frm, to, cents, req_id, now_iso()),
+                (sid, trip_id, m["id"], frm, to, cents, "", now_iso()),
             )
             r = c.execute("SELECT * FROM settlements WHERE id=?", (sid,)).fetchone()
         self.send_json(201, {"ok": True, "settlement": settlement_public(r)})
@@ -818,56 +760,6 @@ class H(BaseHTTPRequestHandler):
             )
             r = c.execute("SELECT * FROM expenses WHERE id=?", (eid,)).fetchone()
         self.send_json(201, {"ok": True, "expense": expense_public(r)})
-
-    def pot_request(self, trip_id):
-        """La tesorera pide reponer lo que adelanto del bote.
-        IMPORTANTE: no crea ningun expense (evitaria doble conteo: el gasto del bote
-        ya esta apuntado). La peticion solo organiza las devoluciones de deudas que
-        ya existen en los balances; no altera balances ni whoPaysWhom."""
-        a = self.auth(trip_id)
-        if not a:
-            return
-        m, _t = a
-        b = self.read_json()
-        if b.get("amount_cents") is not None:
-            try:
-                total = int(b.get("amount_cents"))
-            except Exception:
-                return self.err(400, "importe invalido")
-        else:
-            try:
-                total = int(round(float(b.get("amount") or 0) * 100))
-            except Exception:
-                return self.err(400, "importe invalido")
-        if total <= 0:
-            return self.err(400, "el importe tiene que ser mayor que 0")
-        raw = b.get("nicknames") or []
-        if not isinstance(raw, list) or not raw:
-            return self.err(400, "elige a quien se lo pides")
-        with LOCK, db() as c:
-            row = c.execute("SELECT treasurer_member_id FROM trips WHERE id=?", (trip_id,)).fetchone()
-            tmid = (row["treasurer_member_id"] if row and "treasurer_member_id" in row.keys() else "") or ""
-            if not tmid or m["id"] != tmid:
-                return self.err(403, "solo quien lleva el bote puede pedir para reponer")
-            nicks = self.member_nicks(c, trip_id)
-            names = []
-            for n in raw:
-                n = clean_str(n, 30, "nickname")
-                if n not in nicks:
-                    return self.err(400, "no es del viaje: " + n)
-                if n not in names:
-                    names.append(n)
-            if not names:
-                return self.err(400, "elige a quien se lo pides")
-            shares = self.split_equal(total, names)  # reparto igual; el resto de centimos al primero
-            rid = uuid.uuid4().hex
-            c.execute(
-                "INSERT INTO pot_requests(id,trip_id,created_by,amount_cents,members_json,created_at) VALUES(?,?,?,?,?,?)",
-                (rid, trip_id, m["id"], total, json.dumps(shares, ensure_ascii=False), now_iso()),
-            )
-            r = c.execute("SELECT * FROM pot_requests WHERE id=?", (rid,)).fetchone()
-            out = request_public(c, r)
-        self.send_json(201, {"ok": True, "request": out})
 
     def pot_confirm(self, trip_id, cid):
         """El tesorero confirma (ok=true) o rechaza (ok=false, se borra) una aportacion."""

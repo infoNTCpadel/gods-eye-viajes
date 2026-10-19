@@ -152,13 +152,15 @@ a{color:#e8c877}
       </div>
       <div id="splitInputs"></div>
       <div id="splitPreview" class="card" style="border-color:#d9a441;font-size:15px;line-height:1.8"></div>
+      <div id="potLive" class="mini" style="display:none;margin-top:8px"></div>
+      <div id="potTopup" class="card" style="display:none;border-color:#d9a441;margin-top:8px"></div>
       <label>Foto del ticket (opcional)<input id="ePhoto" type="file" accept="image/*" capture="environment"></label>
       <img id="ePreview" style="display:none;width:100%;max-height:160px;object-fit:cover;border-radius:9px;margin-top:8px">
       <div class="row"><button id="btnExpense">Guardar gasto</button></div>
     </div>
     <div class="grouph">Saldar cuentas</div>
+    <div class="mini">Los pagos son entre personas, no salen del bote.</div>
     <div id="settleList"></div>
-    <div id="reqCards"></div>
     <div class="card">
       <label>Registrar pago</label>
       <div class="row" style="margin-top:0">
@@ -216,6 +218,7 @@ let sharing={on:false, until:0};
 let expMode=localStorage.getItem(MODE_KEY)||'equal';
 let expPayer='', expParts={};
 let expFromPot=false;
+let topupNick='';   // aportante de la recarga del bote en el formulario
 function loadJson(k,d){ try{ const v=JSON.parse(localStorage.getItem(k)); return v==null?d:v; }catch(e){ return d; } }
 function deviceId(){ let d=localStorage.getItem(DEV_KEY); if(!d){ d='dev-'+Math.random().toString(36).slice(2)+Date.now().toString(36); localStorage.setItem(DEV_KEY,d); } return d; }
 function isOrganizer(){ return !!(session && session.role==='organizer'); }
@@ -380,8 +383,6 @@ function renderPot(){
   if(wrap && wrap.style.display!=='none') return; // no pisar mientras se escribe el importe
   const wrapFor=document.getElementById('potForWrap');
   if(wrapFor && wrapFor.style.display!=='none') return; // tampoco mientras la tesorera apunta
-  const wrapReq=document.getElementById('reqWrap');
-  if(wrapReq && wrapReq.style.display!=='none') return; // ni mientras se pide para reponer
   const pot=(serverState && serverState.pot)||{};
   const you=(serverState && serverState.you)||{};
   const mem=members();
@@ -393,22 +394,11 @@ function renderPot(){
     });
     return;
   }
-  const neg=(pot.remainingCents||0)<0;
-  const headHtml=neg
-    ? '<b>🫙 '+esc(pot.treasurer)+' adelantó '+esc(fmtEuro(pot.frontedCents||0))+'</b><div class="mini">el bote quedó en negativo</div>'
-    : '<b>🫙 Bote: '+esc(pot.treasurer)+'</b><div class="mini">aportado '+esc(pot.contributed)+' · gastado del bote '+esc(pot.spentFromPot)+' · quedan <b>'+esc(pot.remaining)+'</b></div>';
+  const headHtml='<b>🫙 Bote: '+esc(pot.treasurer)+'</b><div class="mini">aportado '+esc(pot.contributed)+' · gastado del bote '+esc(pot.spentFromPot)+' · quedan <b>'+esc(pot.remaining)+'</b></div>';
   box.innerHTML='<div class="card" style="border-color:#d9a441">'+headHtml
     +((pot.pendingCents||0)>0?'<div class="mini" style="color:#d9a441">＋'+esc(fmtEuro(pot.pendingCents))+' pendientes de confirmar</div>':'')
     +(((pot.pendingList)||[]).some(p=>session&&p.nickname===session.nickname)?'<div class="mini">⏳ Tu aportación está pendiente de que '+esc(pot.treasurer)+' la confirme.</div>':'')
     +'<div class="row"><button id="btnPotContrib">Aportar al bote</button></div>'
-    +(neg&&you.isTreasurer?'<div class="row" style="margin-top:6px"><button id="btnPotReq">Pedir para reponer</button></div>'
-      +'<div id="reqWrap" style="display:none;margin-top:8px">'
-      +'<div class="mini" id="reqHint"></div>'
-      +'<div class="catchips" id="reqChips" style="margin:6px 0">'+mem.map(m=>'<button type="button" data-n="'+esc(m.nickname)+'" class="'+(m.nickname===pot.treasurer?'off':'on')+'">'+esc(m.nickname)+'</button>').join('')+'</div>'
-      +'<label>Importe a pedir<input id="reqAmount" class="amount" inputmode="decimal" placeholder="0,00"></label>'
-      +'<div class="row"><button id="btnReqGo">Pedir</button></div>'
-      +'<div class="row" id="reqShareRow" style="display:none;margin-top:6px"><button id="btnReqShare" class="sec">Compartir por WhatsApp</button></div>'
-      +'</div>':'')
     +(you.isTreasurer?'<div class="row" style="margin-top:6px"><button id="btnPotForOther" class="sec">＋ Aportación de un compañero</button></div>'
       +'<div id="potForWrap" style="display:none;margin-top:8px"><div class="mini">La apuntas tú: queda confirmada al momento.</div><div class="catchips" id="potForChips" style="margin:6px 0">'
       +mem.map(m=>'<button type="button" data-n="'+esc(m.nickname)+'">'+esc(m.nickname)+'</button>').join('')
@@ -418,42 +408,6 @@ function renderPot(){
   document.getElementById('btnPotContrib').onclick=()=>{
     const w=document.getElementById('potContribWrap'); w.style.display=(w.style.display==='none')?'block':'none';
   };
-  /* Pedir para reponer: solo la tesorera, cuando el bote queda en negativo */
-  const btnReq=document.getElementById('btnPotReq');
-  if(btnReq){
-    document.querySelectorAll('#reqChips button').forEach(b=>b.onclick=()=>{ b.classList.toggle('on'); b.classList.toggle('off'); });
-    btnReq.onclick=()=>{
-      const w=document.getElementById('reqWrap');
-      const opening=w.style.display==='none';
-      w.style.display=opening?'block':'none';
-      if(opening){
-        const pre=Math.min(pot.frontedCents||0, pot.treasurerOwedCents||0)/100;
-        document.getElementById('reqAmount').value=pre>0?pre.toFixed(2).replace('.',','):'';
-        document.getElementById('reqHint').innerHTML='Según las cuentas, el grupo te debe <b>'+esc(pot.treasurerOwed||'0,00 €')+'</b>.';
-        document.getElementById('reqShareRow').style.display='none';
-      }
-    };
-    document.getElementById('btnReqGo').onclick=async()=>{
-      const names=[...document.querySelectorAll('#reqChips button.on')].map(b=>b.dataset.n);
-      const amount=parseAmt(document.getElementById('reqAmount').value);
-      if(!names.length){ toast('Elige a quién se lo pides.'); return; }
-      if(amount<=0){ toast('Pon el importe.'); return; }
-      try{
-        const r=await api('/api/trips/'+session.tripId+'/pot/request',{method:'POST',body:{amount_cents:Math.round(amount*100),nicknames:names}});
-        const rq=r.request;
-        const txt=pot.treasurer+' ha adelantado '+fmtEuro(rq.amountCents)+' del bote 🫙: '+rq.shares.map(s=>s.nickname+' '+fmtEuro(s.shareCents)).join(', ');
-        await refreshState(true);
-        const sr=document.getElementById('reqShareRow');
-        if(sr){ sr.style.display='flex';
-          document.getElementById('btnReqShare').onclick=()=>{
-            if(navigator.clipboard) navigator.clipboard.writeText(txt).catch(()=>{});
-            window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank');
-          };
-        }
-        toast('Petición creada 🫙');
-      }catch(e){ toast('Error: '+e.message); }
-    };
-  }
   document.getElementById('btnPotGo').onclick=async()=>{
     const amount=parseAmt(document.getElementById('potAmount').value);
     if(amount<=0){ toast('Pon el importe.'); return; }
@@ -526,6 +480,31 @@ function splitPreview(){
     inputs.querySelectorAll('.pval').forEach(i=>i.addEventListener('input',()=>{ expParts[i.dataset.p].val=i.value; splitPreview(); }));
   }
   box.innerHTML='<b>'+fmtEuro(Math.round(total*100))+'</b> se reparte:<br>'+lines.join('<br>');
+  renderPotTopup();
+}
+/* Recarga del bote al pagar: si el importe supera lo que queda en el bote,
+   la diferencia se añade en el momento como aportación antes de guardar el gasto. */
+function renderPotTopup(){
+  const live=document.getElementById('potLive'), box=document.getElementById('potTopup');
+  if(!live||!box) return;
+  const pot=(serverState&&serverState.pot)||{};
+  if(!expFromPot||!pot.treasurer){ live.style.display='none'; box.style.display='none'; return; }
+  const remCents=pot.remainingCents||0;
+  const totalCents=Math.round(parseAmt(document.getElementById('eAmount').value)*100);
+  live.style.display='block';
+  live.innerHTML='🫙 Bote: quedan <b>'+esc(fmtEuro(remCents))+'</b>';
+  if(totalCents>remCents){
+    const falta=totalCents-remCents;
+    if(!topupNick&&session) topupNick=session.nickname;
+    const mem=members();
+    const you=(serverState&&serverState.you)||{};
+    box.style.display='block';
+    box.innerHTML='<b>⚠️ Faltan '+esc(fmtEuro(falta))+'</b><div class="mini">Añade la diferencia al bote ahora: se guardará como aportación antes que el gasto.</div>'
+      +'<div class="catchips" style="margin:6px 0">'+mem.map(m=>'<button type="button" data-n="'+esc(m.nickname)+'" class="'+(m.nickname===topupNick?'on':'')+'">'+esc(m.nickname)+'</button>').join('')+'</div>'
+      +'<label>Aportación al bote<input id="topupAmount" class="amount" inputmode="decimal" value="'+(falta/100).toFixed(2).replace('.',',')+'"></label>'
+      +(!you.isTreasurer?'<div class="mini">Como no llevas el bote, quedará ⏳ pendiente de que '+esc(pot.treasurer)+' la confirme.</div>':'');
+    box.querySelectorAll('button').forEach(b=>b.onclick=()=>{ topupNick=b.dataset.n; renderPotTopup(); });
+  } else { box.style.display='none'; }
 }
 function renderExpenses(){
   renderPot();
@@ -571,7 +550,6 @@ function renderExpenses(){
   document.getElementById('contribs').innerHTML=exCon.length?exCon.slice().reverse().map(rowHtml).join(''):'<div class="card">Sin aportaciones.</div>';
   document.getElementById('nExp').textContent=exExp.length;
   document.getElementById('nCon').textContent=exCon.length;
-  renderReqCards();
   // saldar
   const w=(serverState && serverState.whoPaysWhom)||[];
   document.getElementById('settleList').innerHTML=w.length?w.map(s=>'<div class="settle"><b>'+esc(s.from)+'</b> → <b>'+esc(s.to)+'</b>: <b>'+esc(s.amount)+'</b></div>').join(''):'<div class="mini">Todo en paz 🎉</div>';
@@ -580,34 +558,6 @@ function renderExpenses(){
   document.getElementById('sFrom').innerHTML=mem.map(m=>'<option>'+esc(m.nickname)+'</option>').join('');
   document.getElementById('sTo').innerHTML=mem.map(m=>'<option>'+esc(m.nickname)+'</option>').join('');
   document.getElementById('nSet').textContent=(serverState && serverState.settlements||[]).length;
-}
-/* PETICIONES DE REPONER — tarjetas abiertas sobre los acordeones */
-window.markReqPaid=async(rid,nick,cents)=>{
-  if(!session) return;
-  try{
-    await api('/api/trips/'+session.tripId+'/settlements',{method:'POST',body:{from:nick,to:((serverState&&serverState.pot)||{}).treasurer,amount:cents/100,request_id:rid}});
-    await refreshState(true); toast('Pago registrado ✔');
-  }catch(e){ toast('Error: '+e.message); }
-};
-function renderReqCards(){
-  const box=document.getElementById('reqCards'); if(!box) return;
-  const pot=(serverState && serverState.pot)||{};
-  const reqs=pot.requests||[];
-  if(!reqs.length){ box.innerHTML=''; return; }
-  const open=reqs.filter(r=>!r.done);
-  let h=open.map(r=>{
-    const rows=r.shares.map(s=>{
-      const left=s.shareCents-s.paidCents;
-      const ctl=left>0
-        ? '<button class="sec reqpay" style="width:auto;min-height:44px;padding:8px 12px" data-rid="'+r.id+'" data-n="'+esc(s.nickname)+'" data-c="'+left+'">Marcar pagado</button>'
-        : '<span class="mini" style="color:#7fb069">✓ Pagado</span>';
-      return '<div class="bal"><div><b>'+esc(s.nickname)+'</b><div class="mini">'+esc(s.share)+'</div></div><div>'+ctl+'</div></div>';
-    }).join('');
-    return '<div class="card" style="border-color:#d9a441;margin-top:10px"><b>🫙 '+esc(pot.treasurer)+' pide reponer '+esc(r.amount)+'</b>'+rows+'</div>';
-  }).join('');
-  if(!open.length) h='<div class="mini" style="margin-top:8px">✓ Reembolsado</div>';
-  box.innerHTML=h;
-  box.querySelectorAll('.reqpay').forEach(b=>b.onclick=()=>markReqPaid(b.dataset.rid,b.dataset.n,Number(b.dataset.c)));
 }
 document.getElementById('btnToggleExpForm').onclick=()=>{ const w=document.getElementById('expFormWrap'); const open=w.style.display!=='none'; if(open){ w.style.display='none'; document.getElementById('btnToggleExpForm').textContent='＋ Añadir gasto'; } else { w.style.display='block'; document.getElementById('btnToggleExpForm').textContent='Cerrar'; renderExpenses(); splitPreview(); } };
 document.getElementById('eAmount').addEventListener('input',splitPreview);
@@ -621,6 +571,24 @@ document.getElementById('btnExpense').onclick=async()=>{
   if(expMode==='amounts'){ parts=names.map(n=>({nickname:n, amount:parseFloat(String(expParts[n].val||'0').replace(',','.'))||0})); }
   else if(expMode==='shares'){ parts=names.map(n=>({nickname:n, share:parseFloat(String(expParts[n].val||'1').replace(',','.'))||1})); }
   try{
+    /* Recarga del bote: si el gasto del bote supera lo que queda, primero la aportación */
+    if(expFromPot){
+      const pot0=(serverState&&serverState.pot)||{};
+      const remCents=pot0.remainingCents||0;
+      const cents=Math.round(amount*100);
+      if(cents>remCents){
+        const topEl=document.getElementById('topupAmount');
+        const top=topEl?parseAmt(topEl.value):0;
+        if(Math.round(top*100)<cents-remCents){ toast('Añade al bote al menos lo que falta ('+fmtEuro(cents-remCents)+').'); return; }
+        const cr=await api('/api/trips/'+session.tripId+'/pot/contribute',{method:'POST',body:{amount:top,nickname:topupNick||session.nickname}});
+        if(cr.expense&&cr.expense.status==='pending'){
+          await refreshState(true);
+          toast('Aportación ⏳ pendiente de que '+pot0.treasurer+' la confirme. Guarda el gasto cuando la confirme.');
+          return;
+        }
+        await refreshState(true); // el bote ya incluye la aportación confirmada
+      }
+    }
     await api('/api/trips/'+session.tripId+'/expenses',{method:'POST',body:{description:document.getElementById('eDesc').value.trim()||'Gasto', amount:amount, payer:expPayer||session.nickname, participants:parts, split_mode:expMode, from_pot:expFromPot, photo:ticketData||''}});
     document.getElementById('eAmount').value=''; document.getElementById('eDesc').value=''; ticketData=''; document.getElementById('ePreview').style.display='none'; document.getElementById('ePhoto').value='';
     expFromPot=false;
