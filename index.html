@@ -111,7 +111,7 @@ a{color:#e8c877}
     <div id="importBanner" class="card" style="display:none;border-color:#d9a441"></div>
     <div class="card">
       <h2 style="margin-top:0">Unirme con código</h2>
-      <div class="mini" style="margin-bottom:8px">Pide el código o el enlace de invitación a quien creó el viaje.</div>
+      <div class="mini" style="margin-bottom:8px">Pide el código o el enlace de invitación a quien creó el viaje. Si ya entraste antes, usa <b>exactamente el mismo apodo</b>: la app te reconoce por ese nombre y conserva tu rol, también desde otro navegador.</div>
       <label>Código<input id="jCode" placeholder="K7PX3M" style="text-transform:uppercase" maxlength="6"></label>
       <label>Tu apodo<input id="jNick" placeholder="Ana"></label>
       <div class="row">
@@ -656,29 +656,28 @@ async function loadContext(){
   if(!dest){ box.innerHTML=''; ctxDest=''; return; }
   if(ctxDest===dest && box.innerHTML) return;
   ctxDest=dest;
-  box.innerHTML='<div class="card"><b>📍 '+esc(dest)+'</b><div class="mini">Cargando contexto…</div></div>';
-  let html='<div class="card"><b>📍 '+esc(dest)+'</b>';
+  box.innerHTML='<div class="card" style="padding:10px 12px"><b>📍 '+esc(dest)+'</b> <span class="mini">Cargando contexto…</span></div>';
+  let html='<div class="card" style="padding:10px 12px"><div style="display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center"><b>📍 '+esc(dest)+'</b>';
   try{
     const g=await (await fetch('https://geocoding-api.open-meteo.com/v1/search?name='+encodeURIComponent(dest)+'&count=1&language=es')).json();
     if(g.results && g.results[0]){
       const w=await (await fetch('https://api.open-meteo.com/v1/forecast?latitude='+g.results[0].latitude+'&longitude='+g.results[0].longitude+'&daily=weathercode,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=3')).json();
       if(w.daily && w.daily.time && w.daily.time.length){
         const DC=['dom','lun','mar','mié','jue','vie','sáb'];
-        html+='<div class="mini" style="margin-top:8px"><b>Previsión</b></div><div style="display:flex;gap:8px;margin-top:4px">';
         for(let i=0;i<w.daily.time.length;i++){
           const dt=new Date(w.daily.time[i]+'T12:00:00');
-          html+='<div style="flex:1;text-align:center;background:#241b0f;border-radius:8px;padding:8px 4px"><div class="mini">'+DC[dt.getDay()]+'</div><div style="font-size:22px">'+wmoEmoji(w.daily.weathercode[i])+'</div><div style="font-weight:800">'+Math.round(w.daily.temperature_2m_max[i])+'°</div><div class="mini">'+Math.round(w.daily.temperature_2m_min[i])+'°</div></div>';
+          html+='<span class="mini" style="white-space:nowrap">'+DC[dt.getDay()]+' '+wmoEmoji(w.daily.weathercode[i])+' <b style="color:#e8ddc4">'+Math.round(w.daily.temperature_2m_max[i])+'°</b>/'+Math.round(w.daily.temperature_2m_min[i])+'°</span>';
         }
-        html+='</div>';
       }
     }
   }catch(e){}
+  html+='</div>';
   try{
     const wk=await (await fetch('https://es.wikipedia.org/api/rest_v1/page/summary/'+encodeURIComponent(dest))).json();
     if(wk.extract){
-      const txt=wk.extract.split('. ').slice(0,3).join('. ');
-      html+='<div class="mini" style="margin-top:10px">'+esc(txt)+(txt.length<wk.extract.length?'…':'')+'</div>';
-      if(wk.thumbnail && wk.thumbnail.source) html+='<img src="'+esc(wk.thumbnail.source)+'" style="width:100%;max-height:140px;object-fit:cover;border-radius:8px;margin-top:6px" loading="lazy">';
+      let txt=wk.extract.split('. ')[0];
+      if(txt.length>220) txt=txt.slice(0,220).trim()+'…'; else if(!txt.endsWith('.')) txt+='.';
+      html+='<div class="mini" style="margin-top:5px">'+esc(txt)+'</div>';
     }
   }catch(e){}
   html+='</div>';

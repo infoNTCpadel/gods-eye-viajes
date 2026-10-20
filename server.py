@@ -161,6 +161,37 @@ def init_db():
         except Exception:
             pass
 
+        # v18: si una versión anterior creó dos perfiles con el mismo apodo
+        # (por entrar desde otro navegador), se fusionan. Gana el organizador
+        # y, si no lo hay, el perfil más antiguo.
+        try:
+            groups = {}
+            for r in c.execute(
+                    "SELECT * FROM members ORDER BY trip_id, "
+                    "CASE WHEN role='organizer' THEN 0 ELSE 1 END, created_at").fetchall():
+                key = (r["trip_id"], (r["nickname"] or "").strip().lower())
+                groups.setdefault(key, []).append(r)
+            has_places = c.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='places'").fetchone()
+            for rows in groups.values():
+                if len(rows) < 2:
+                    continue
+                keep = rows[0]
+                latest = max(rows, key=lambda r: r["sharing_until"] or "")
+                if (latest["sharing_until"] or "") > (keep["sharing_until"] or ""):
+                    c.execute(
+                        "UPDATE members SET last_seen=?, last_lat=?, last_lng=?, sharing_until=? WHERE id=?",
+                        (latest["last_seen"], latest["last_lat"], latest["last_lng"],
+                         latest["sharing_until"], keep["id"]))
+                for dup in rows[1:]:
+                    c.execute("UPDATE expenses SET member_id=? WHERE member_id=?", (keep["id"], dup["id"]))
+                    c.execute("UPDATE settlements SET member_id=? WHERE member_id=?", (keep["id"], dup["id"]))
+                    if has_places:
+                        c.execute("UPDATE places SET member_id=? WHERE member_id=?", (keep["id"], dup["id"]))
+                    c.execute("DELETE FROM members WHERE id=?", (dup["id"],))
+        except Exception:
+            pass
+
 
 def new_code(c):
     import secrets
@@ -500,13 +531,15 @@ class H(BaseHTTPRequestHandler):
             t = c.execute("SELECT * FROM trips WHERE invite_code=?", (code,)).fetchone()
             if not t:
                 return self.err(404, "codigo de viaje no existe")
-            m = None
-            if device:
-                m = c.execute("SELECT * FROM members WHERE trip_id=? AND device_id=?", (t["id"], device)).fetchone()
+            m = c.execute(
+                "SELECT * FROM members WHERE trip_id=? AND lower(trim(nickname))=lower(trim(?)) "
+                "ORDER BY CASE WHEN role='organizer' THEN 0 ELSE 1 END, created_at LIMIT 1",
+                (t["id"], nick)).fetchone()
             if m:
                 token = m["token"]
                 mid = m["id"]
-                c.execute("UPDATE members SET last_seen=? WHERE id=?", (now_iso(), mid))
+                c.execute("UPDATE members SET last_seen=?, device_id=? WHERE id=?",
+                          (now_iso(), device or m["device_id"] or "", mid))
             else:
                 mid, token = uuid.uuid4().hex, uuid.uuid4().hex
                 c.execute(
