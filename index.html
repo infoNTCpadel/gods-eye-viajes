@@ -215,7 +215,11 @@ a{color:#e8c877}
     <div id="itinDayTabs" class="catchips" style="margin:0 0 4px"></div>
     <div id="itinList"></div>
     <div class="card compact-form" id="itinFormCard" style="display:none">
-      <label id="itinFormTitle">Añadir al itinerario (solo tú, que creaste el viaje)</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <label id="itinFormTitle" style="margin:0;flex:1">Añadir al itinerario (solo tú, que creaste el viaje)</label>
+        <button id="btnItinCancel" class="sec" style="display:none;width:auto;min-height:44px;padding:8px 12px">✕ Cancelar</button>
+        <button id="btnItinAdd" style="width:auto;min-height:44px;padding:8px 16px">＋ Añadir</button>
+      </div>
       <div class="catchips one-line" id="itinKindChips" style="margin-top:6px"></div>
       <div class="row" style="margin-top:8px">
         <div><label>Día<input id="itinDay" type="date"></label></div>
@@ -223,7 +227,6 @@ a{color:#e8c877}
       </div>
       <label>Título<input id="itinTitle" placeholder="Visita a la bodega"></label>
       <label>Nota (opcional)<input id="itinNote" placeholder="Llevar bañador…"></label>
-      <div class="row"><button id="btnItinAdd">＋ Añadir</button><button id="btnItinCancel" class="sec" style="display:none">Cancelar</button></div>
     </div>
   </section>
 
