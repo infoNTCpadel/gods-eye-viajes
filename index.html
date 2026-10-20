@@ -36,7 +36,11 @@ input.amount{font-size:34px;font-weight:800;text-align:center;color:#e8c877;padd
 .mini{font-size:13px;color:#b8a888;line-height:1.5}
 .actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 .actions button{padding:10px 12px;font-size:13px;min-height:48px;width:auto}
-.sticky-actions{position:sticky;bottom:calc(84px + env(safe-area-inset-bottom));background:#1d1710;padding-top:10px;z-index:6}
+.catchips.one-line{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px}
+.catchips.one-line button{flex:0 0 auto;min-height:42px;padding:8px 12px;font-size:14px}
+.compact-form{padding:10px 12px}
+.compact-form label{margin-top:7px}
+.compact-form input{padding:9px 10px}
 .toast{position:fixed;left:12px;right:12px;bottom:calc(104px + env(safe-area-inset-bottom));z-index:2000;background:#f3ead6;color:#14100c;padding:12px;border-radius:11px;font-weight:700;display:none;box-shadow:0 8px 30px #000;max-width:536px;margin-left:auto;margin-right:auto}
 a{color:#e8c877}
 .bottomnav{position:fixed;left:0;right:0;bottom:0;z-index:1500;display:flex;background:rgba(29,23,16,.94);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border-top:1px solid #3a2c18;padding-bottom:env(safe-area-inset-bottom)}
@@ -210,16 +214,16 @@ a{color:#e8c877}
     <div id="itinBanner" class="card" style="display:none;border-color:#d9a441"><b>🆕 El itinerario se actualizó.</b><div class="mini">Quien creó el viaje cambió el plan.</div></div>
     <div id="itinDayTabs" class="catchips" style="margin:0 0 4px"></div>
     <div id="itinList"></div>
-    <div class="card" id="itinFormCard" style="display:none">
+    <div class="card compact-form" id="itinFormCard" style="display:none">
       <label id="itinFormTitle">Añadir al itinerario (solo tú, que creaste el viaje)</label>
-      <div class="catchips" id="itinKindChips" style="margin-top:8px"></div>
+      <div class="catchips one-line" id="itinKindChips" style="margin-top:6px"></div>
       <div class="row" style="margin-top:8px">
         <div><label>Día<input id="itinDay" type="date"></label></div>
         <div><label>Hora<input id="itinTime" type="time"></label></div>
       </div>
       <label>Título<input id="itinTitle" placeholder="Visita a la bodega"></label>
       <label>Nota (opcional)<input id="itinNote" placeholder="Llevar bañador…"></label>
-      <div class="row sticky-actions"><button id="btnItinAdd">＋ Añadir</button><button id="btnItinCancel" class="sec" style="display:none">Cancelar</button></div>
+      <div class="row"><button id="btnItinAdd">＋ Añadir</button><button id="btnItinCancel" class="sec" style="display:none">Cancelar</button></div>
     </div>
   </section>
 
@@ -573,15 +577,18 @@ function renderItinerary(){
     loadContext(); return;
   }
   const weeks=Math.ceil(days.length/7);
+  if(!itinSelDay) itinWeek=weeks-1;
   itinWeek=Math.max(0,Math.min(itinWeek,weeks-1));
   const wdays=days.slice(itinWeek*7,itinWeek*7+7);
-  if(!itinSelDay||!wdays.includes(itinSelDay)) itinSelDay=wdays[0];
+  if(!itinSelDay) itinSelDay=days[days.length-1];
+  else if(!wdays.includes(itinSelDay)) itinSelDay=wdays[0];
+  if(!itinEditId && itinSelDay) document.getElementById('itinDay').value=itinSelDay;
   let tabs='';
   if(weeks>1) tabs+='<button type="button" id="itinPrevW" class="sec"'+(itinWeek===0?' disabled style="opacity:.35"':'')+'>‹</button>';
   tabs+=wdays.map(d=>'<button type="button" data-d="'+esc(d)+'" class="'+(d===itinSelDay?'on':'')+'">'+esc(shortDay(d))+'</button>').join('');
   if(weeks>1) tabs+='<button type="button" id="itinNextW" class="sec"'+(itinWeek>=weeks-1?' disabled style="opacity:.35"':'')+'>›</button>';
   tabsBox.innerHTML=tabs;
-  tabsBox.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>{ itinSelDay=b.dataset.d; renderItinerary(); });
+  tabsBox.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>{ itinSelDay=b.dataset.d; if(!itinEditId) document.getElementById('itinDay').value=itinSelDay; renderItinerary(); });
   const pw=document.getElementById('itinPrevW'); if(pw&&itinWeek>0) pw.onclick=()=>{ itinWeek--; renderItinerary(); };
   const nw=document.getElementById('itinNextW'); if(nw&&itinWeek<weeks-1) nw.onclick=()=>{ itinWeek++; renderItinerary(); };
   const list=items.filter(x=>x.day===itinSelDay);
@@ -628,10 +635,15 @@ document.getElementById('btnItinAdd').onclick=()=>{ saving(document.getElementBy
   if(!title){ toast('Pon un título.'); return; }
   const body={day:day,time:time,title:title,note:document.getElementById('itinNote').value.trim(),kind:itinKind};
   try{
+    const wasEdit=!!itinEditId;
     if(itinEditId) await api('/api/trips/'+session.tripId+'/itinerary/'+itinEditId,{method:'POST',body:body});
     else await api('/api/trips/'+session.tripId+'/itinerary',{method:'POST',body:body});
     itinCancelEdit();
-    await refreshState(true); markItinSeen(); toast(itinEditId?'Cambios guardados 📋':'Añadido al itinerario 📋');
+    await refreshState(true);
+    const nd=[...new Set((((serverState||{}).itinerary||{}).items||[]).map(x=>x.day))].sort();
+    const idx=nd.indexOf(day);
+    if(idx>=0){ itinWeek=Math.floor(idx/7); itinSelDay=day; document.getElementById('itinDay').value=day; renderItinerary(); }
+    markItinSeen(); toast(wasEdit?'Cambios guardados 📋':'Añadido al itinerario 📋');
   }catch(e){ toast('Error: '+e.message); }
 }); };
 window.delItin=id=>{ if(!session) return; if(!confirm('¿Quitar este punto del itinerario?')) return;
