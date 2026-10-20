@@ -14,7 +14,7 @@
 .topbar .brand{font-size:18px;color:#e8c877;font-weight:800}
 .topbar .tripname{font-size:15px;font-weight:700;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .topbar .nowline{font-size:12px;color:#b8a888;margin-top:2px}
-.wrap{padding:12px 14px calc(128px + env(safe-area-inset-bottom));max-width:560px;margin:0 auto}
+.wrap{padding:12px 14px calc(160px + env(safe-area-inset-bottom));max-width:560px;margin:0 auto}
 .tab{display:none}.tab.active{display:block}
 h2{font-size:19px;color:#e8c877;margin:6px 0 10px}
 #map{height:52vh;min-height:320px;border-radius:14px;border:1px solid #3a2c18;background:#0d0a07}
@@ -36,6 +36,7 @@ input.amount{font-size:34px;font-weight:800;text-align:center;color:#e8c877;padd
 .mini{font-size:13px;color:#b8a888;line-height:1.5}
 .actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 .actions button{padding:10px 12px;font-size:13px;min-height:48px;width:auto}
+.sticky-actions{position:sticky;bottom:calc(84px + env(safe-area-inset-bottom));background:#1d1710;padding-top:10px;z-index:6}
 .toast{position:fixed;left:12px;right:12px;bottom:calc(104px + env(safe-area-inset-bottom));z-index:2000;background:#f3ead6;color:#14100c;padding:12px;border-radius:11px;font-weight:700;display:none;box-shadow:0 8px 30px #000;max-width:536px;margin-left:auto;margin-right:auto}
 a{color:#e8c877}
 .bottomnav{position:fixed;left:0;right:0;bottom:0;z-index:1500;display:flex;background:rgba(29,23,16,.94);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border-top:1px solid #3a2c18;padding-bottom:env(safe-area-inset-bottom)}
@@ -218,7 +219,7 @@ a{color:#e8c877}
       </div>
       <label>Título<input id="itinTitle" placeholder="Visita a la bodega"></label>
       <label>Nota (opcional)<input id="itinNote" placeholder="Llevar bañador…"></label>
-      <div class="row"><button id="btnItinAdd">＋ Añadir</button><button id="btnItinCancel" class="sec" style="display:none">Cancelar</button></div>
+      <div class="row sticky-actions"><button id="btnItinAdd">＋ Añadir</button><button id="btnItinCancel" class="sec" style="display:none">Cancelar</button></div>
     </div>
   </section>
 
