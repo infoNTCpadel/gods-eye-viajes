@@ -10,11 +10,11 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
 *{box-sizing:border-box}html,body{margin:0;padding:0;background:#14100c;color:#f3ead6;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;overflow-x:hidden}body{-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%}
-.topbar{position:sticky;top:0;z-index:1200;background:linear-gradient(#1d1710,#14100c);padding:calc(10px + env(safe-area-inset-top)) 14px 10px;border-bottom:1px solid #3a2c18}
-.topbar .brand{font-size:18px;color:#e8c877;font-weight:800}
-.topbar .tripname{font-size:15px;font-weight:700;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.topbar{position:sticky;top:0;z-index:1200;background:linear-gradient(#1d1710,#14100c);padding:calc(8px + env(safe-area-inset-top)) 12px 8px;border-bottom:1px solid #3a2c18}
+.topbar .brand{font-size:15px;color:#e8c877;font-weight:800}
+.topbar .tripname{font-size:14px;font-weight:700;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .topbar .nowline{font-size:12px;color:#b8a888;margin-top:2px}
-.wrap{padding:12px 14px calc(160px + env(safe-area-inset-bottom));max-width:560px;margin:0 auto}
+.wrap{padding:10px 14px calc(96px + env(safe-area-inset-bottom));max-width:560px;margin:0 auto}
 .tab{display:none}.tab.active{display:block}
 h2{font-size:19px;color:#e8c877;margin:6px 0 10px}
 #map{height:52vh;min-height:320px;border-radius:14px;border:1px solid #3a2c18;background:#0d0a07}
@@ -41,9 +41,12 @@ input.amount{font-size:34px;font-weight:800;text-align:center;color:#e8c877;padd
 .compact-form{padding:10px 12px}
 .compact-form label{margin-top:7px}
 .compact-form input{padding:9px 10px}
-.toast{position:fixed;left:12px;right:12px;bottom:calc(104px + env(safe-area-inset-bottom));z-index:2000;background:#f3ead6;color:#14100c;padding:12px;border-radius:11px;font-weight:700;display:none;box-shadow:0 8px 30px #000;max-width:536px;margin-left:auto;margin-right:auto}
+.toast{position:fixed;left:12px;right:12px;bottom:calc(84px + env(safe-area-inset-bottom));z-index:2000;background:#f3ead6;color:#14100c;padding:12px;border-radius:11px;font-weight:700;display:none;box-shadow:0 8px 30px #000;max-width:536px;margin-left:auto;margin-right:auto}
 a{color:#e8c877}
-.bottomnav{position:fixed;left:0;right:0;bottom:0;z-index:1500;display:flex;background:rgba(29,23,16,.94);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border-top:1px solid #3a2c18;padding-bottom:env(safe-area-inset-bottom)}
+.bottomnav{position:fixed;left:0;right:0;bottom:0;z-index:1500;display:flex;background:rgba(29,23,16,.97);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border-top:1px solid #3a2c18;padding-bottom:env(safe-area-inset-bottom);transform:translateY(110%);transition:transform .25s ease;box-shadow:0 -10px 34px rgba(0,0,0,.55)}
+.bottomnav.open{transform:translateY(0)}
+#navToggle{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(12px + env(safe-area-inset-bottom));z-index:1600;width:auto;min-height:50px;padding:10px 22px;border-radius:26px;box-shadow:0 8px 24px #000;font-size:15px;display:none;align-items:center;gap:8px;white-space:nowrap}
+#navToggle.open{bottom:calc(92px + env(safe-area-inset-bottom))}
 .bottomnav button{flex:1;background:transparent;color:#b8a888;border:0;border-radius:0;font-size:13px;min-height:70px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
 .bottomnav button .ic{font-size:24px}
 .bottomnav button.on{color:#e8c877;background:#2a2114;box-shadow:inset 0 3px 0 #d9a441}
@@ -53,7 +56,7 @@ a{color:#e8c877}
 .grouph{font-size:15px;color:#e8c877;margin:18px 0 8px;font-weight:800;text-transform:capitalize}
 .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
 .grid img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;cursor:pointer}
-.fab{position:fixed;right:calc(16px + env(safe-area-inset-right));bottom:calc(100px + env(safe-area-inset-bottom));z-index:1700;width:64px;height:64px;min-height:64px;border-radius:50%;font-size:28px;padding:0;box-shadow:0 8px 24px #000;display:none;align-items:center;justify-content:center}
+.fab{position:fixed;right:calc(16px + env(safe-area-inset-right));bottom:calc(84px + env(safe-area-inset-bottom));z-index:1700;width:64px;height:64px;min-height:64px;border-radius:50%;font-size:28px;padding:0;box-shadow:0 8px 24px #000;display:none;align-items:center;justify-content:center}
 #lightbox{display:none;position:fixed;inset:0;z-index:2500;background:rgba(8,6,4,.96);padding:calc(16px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom));overflow-y:auto}
 #lightbox img{width:100%;max-height:60vh;object-fit:contain;border-radius:10px}
 #lightbox .t{font-weight:800;font-size:20px;margin-top:10px}
@@ -100,10 +103,14 @@ a{color:#e8c877}
 <body>
 <div id="loadbar"></div>
 <div class="topbar">
-  <div class="brand">📖 Diario de viaje</div>
-  <div id="hdrTrip" class="tripname" style="display:none"></div>
+  <div style="display:flex;align-items:center;gap:10px">
+    <div style="flex:1;min-width:0">
+      <div class="brand">📖 Diario de viaje</div>
+      <div id="hdrTrip" class="tripname" style="display:none"></div>
+    </div>
+    <div class="topbtns" id="hdrChangeRow" style="display:none;margin:0"><button id="btnShareTrip" class="sec" style="width:auto;min-height:40px;padding:6px 14px;font-size:14px">Compartir viaje</button></div>
+  </div>
   <div id="hdrMembers" class="nowline" style="display:none"></div>
-  <div class="topbtns" id="hdrChangeRow" style="display:none"><button id="btnShareTrip" class="sec">Compartir viaje</button></div>
 </div>
 <div class="wrap">
 
@@ -236,6 +243,7 @@ a{color:#e8c877}
   <button data-tab="donde"><span class="ic">📍</span>Dónde estamos</button>
   <button data-tab="itin"><span class="ic">📋</span>Itinerario<span id="itinDot" style="display:none;color:#d9a441"> ●</span></button>
 </nav>
+<button id="navToggle" style="display:none">☰ Menú</button>
 <div id="toast" class="toast"></div>
 <div id="lightbox"><div style="text-align:right"><button id="btnCloseLb" class="sec" style="width:auto">Cerrar</button></div><img id="lbImg" alt=""><div class="t" id="lbTitle"></div><div class="n" id="lbNote"></div><div class="m" id="lbMeta"></div><div id="lbTags" style="margin-top:8px"></div><div id="lbTagEdit" style="display:none;margin-top:8px"><label style="font-size:13px;color:#b8a888">Etiquetas (separadas por comas)<input id="lbTagInput" placeholder="playa, atardecer"></label><div class="row" style="margin-top:8px"><button class="sec" id="btnSaveTags">Guardar etiquetas</button></div></div><div class="actions" id="lbActions"></div></div>
 
@@ -299,10 +307,16 @@ async function heartbeat(){
 }
 
 /* TABS */
+const TAB_META={diario:['📖','Diario'],gastos:['💶','Gastos'],donde:['📍','Dónde estamos'],itin:['📋','Itinerario'],start:['🏠','Inicio']};
+let currentTab='start';
+function navToggleLabel(){ const m=TAB_META[currentTab]||['☰','Menú']; let l=m[0]+' '+m[1]; const d=document.getElementById('itinDot'); if(d && d.style.display!=='none' && currentTab!=='itin') l+=' <span style="color:#d9a441">●</span>'; return l+' <span style="opacity:.65">☰</span>'; }
+function refreshNavToggle(){ const tg=document.getElementById('navToggle'); if(!tg) return; tg.style.display=session?'flex':'none'; const nav=document.getElementById('bottomNav'); if(nav && !nav.classList.contains('open')) tg.innerHTML=navToggleLabel(); }
+function setNavOpen(open){ const nav=document.getElementById('bottomNav'), tg=document.getElementById('navToggle'); if(!nav||!tg) return; nav.classList.toggle('open',!!open); tg.classList.toggle('open',!!open); tg.innerHTML=open?'✕ Cerrar':navToggleLabel(); }
 function showTab(name){
   document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
   const pane=document.getElementById('tab-'+name); if(pane) pane.classList.add('active');
   document.querySelectorAll('#bottomNav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===name));
+  currentTab=name; setNavOpen(false); refreshNavToggle();
   if(name==='donde'){ setTimeout(()=>{ try{map.invalidateSize()}catch(e){} },80); }
   if(name==='itin'){ markItinSeen(); }
   const fab=document.getElementById('btnFabCam');
@@ -310,6 +324,7 @@ function showTab(name){
   window.scrollTo({top:0,behavior:'smooth'});
   loadStart(); setTimeout(loadDone,320);
 }
+document.getElementById('navToggle').addEventListener('click',()=>{ const nav=document.getElementById('bottomNav'); setNavOpen(!(nav && nav.classList.contains('open'))); });
 document.querySelectorAll('#bottomNav button').forEach(b=>b.addEventListener('click',()=>{
   if(!session){ showTab('start'); toast('Primero únete al viaje con el código.'); return; }
   showTab(b.dataset.tab);
@@ -572,6 +587,7 @@ function renderItinerary(){
   const changed=!!(it.updatedAt && seen && it.updatedAt>seen && !org);
   document.getElementById('itinDot').style.display=changed?'inline':'none';
   document.getElementById('itinBanner').style.display=changed?'block':'none';
+  refreshNavToggle();
   const tabsBox=document.getElementById('itinDayTabs');
   const days=[...new Set(items.map(x=>x.day))].sort();
   if(!days.length){
